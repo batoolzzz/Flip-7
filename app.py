@@ -66,6 +66,36 @@ div.stButton > button:hover {
     border: 2px solid #333333;
 }
 
+[class*="st-key-player_1_hit"] div.stButton > button,
+[class*="st-key-player_1_stay"] div.stButton > button {
+    background-color: #FFF6BF !important;
+    color: black !important;
+    border: 3px solid black !important;
+    border-radius: 10px !important;
+    padding: 8px 22px !important;
+    min-height: 47px;
+    font-weight: 900 !important;
+}
+
+[class*="st-key-player_1_hit"] div.stButton > button *,
+[class*="st-key-player_1_stay"] div.stButton > button * {
+    color: black !important;
+}
+
+[class*="st-key-player_1_hit"] div.stButton > button:hover,
+[class*="st-key-player_1_stay"] div.stButton > button:hover {
+    background-color: #FFF0A3 !important;
+    color: black !important;
+    border: 3px solid black !important;
+}
+
+[class*="st-key-player_1_stay"] div.stButton > button:disabled {
+    background-color: #FFF6BF !important;
+    color: black !important;
+    border: 3px solid black !important;
+    opacity: 0.55;
+}
+
 .main-status {
     background-color: white;
     border: 4px solid black;
@@ -178,6 +208,18 @@ div.stButton > button:hover {
     margin-bottom: 8px;
 }
 
+.player-stats {
+    text-align: center;
+    color: #2D2755 !important;
+    font-size: 16px;
+    font-weight: 750;
+    line-height: 1.75;
+}
+
+.player-stats strong {
+    color: #21183F !important;
+}
+
 .turn-label-hidden {
     background-color: transparent;
     color: transparent !important;
@@ -238,6 +280,170 @@ div.stButton > button:hover {
 .busted-selected {
     border: 5px solid #CC0000 !important;
     box-shadow: 0 0 10px rgba(204, 0, 0, 0.7);
+}
+
+/* Playful board-game theme */
+.stApp {
+    background:
+        radial-gradient(circle at 12% 18%, rgba(255,255,255,.28) 0 5px, transparent 6px),
+        radial-gradient(circle at 88% 32%, rgba(255,255,255,.22) 0 7px, transparent 8px),
+        linear-gradient(145deg, #6C5CE7 0%, #8A6DE9 48%, #36C5B5 100%);
+    background-size: 90px 90px, 130px 130px, auto;
+    min-height: 100vh;
+}
+
+.block-container {
+    max-width: 1180px;
+    padding-top: 1.5rem;
+    padding-bottom: 3rem;
+}
+
+.game-logo {
+    color: white !important;
+    font-family: "Trebuchet MS", Arial, sans-serif;
+    font-size: clamp(42px, 7vw, 72px);
+    line-height: 1;
+    text-align: center;
+    font-weight: 1000;
+    letter-spacing: -3px;
+    text-shadow: 0 5px 0 #3B2A87, 0 9px 18px rgba(30, 20, 80, .28);
+    margin: 4px 0 8px;
+}
+
+.game-logo-seven {
+    color: #FFE66D !important;
+}
+
+.game-subtitle {
+    color: white !important;
+    text-align: center;
+    font-size: 17px;
+    font-weight: 800;
+    margin-bottom: 18px;
+}
+
+.main-status {
+    background: #FFE66D;
+    border: 4px solid #3B2A87;
+    border-radius: 24px;
+    padding: 12px 20px;
+    margin: 0 0 10px;
+    box-shadow: 0 7px 0 #3B2A87, 0 12px 22px rgba(30, 20, 80, .22);
+}
+
+.round-count {
+    color: #3B2A87 !important;
+    font-family: "Trebuchet MS", Arial, sans-serif;
+    font-size: 28px;
+    letter-spacing: 2px;
+    margin: 0;
+}
+
+div.stButton > button {
+    background: #FF6B6B !important;
+    color: white !important;
+    border: 3px solid #3B2A87 !important;
+    border-radius: 14px !important;
+    min-height: 48px;
+    font-family: "Trebuchet MS", Arial, sans-serif;
+    font-weight: 900 !important;
+    box-shadow: 0 5px 0 #3B2A87;
+    transition: transform .12s ease, box-shadow .12s ease, background .12s ease !important;
+}
+
+div.stButton > button:hover {
+    background: #FF8585 !important;
+    color: white !important;
+    border-color: #3B2A87 !important;
+    transform: translateY(-2px);
+    box-shadow: 0 7px 0 #3B2A87;
+}
+
+div.stButton > button:active {
+    transform: translateY(3px);
+    box-shadow: 0 2px 0 #3B2A87;
+}
+
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: rgba(255, 255, 255, .96);
+    border: 4px solid #3B2A87 !important;
+    border-radius: 22px !important;
+    box-shadow: 0 8px 0 #3B2A87, 0 14px 25px rgba(32, 23, 82, .2);
+    padding: 6px;
+}
+
+.player-title {
+    color: white !important;
+    font-family: "Trebuchet MS", Arial, sans-serif;
+    font-size: 25px;
+    letter-spacing: .5px;
+    text-shadow: 0 3px 0 #3B2A87;
+    margin-top: 14px;
+}
+
+.current-player-title {
+    color: #FFE66D !important;
+    text-shadow: 0 3px 0 #3B2A87, 0 0 14px rgba(255, 230, 109, .7);
+}
+
+.current-turn-label {
+    background: #20BF6B;
+    border: 3px solid white;
+    box-shadow: 0 4px 0 #167D49;
+    padding: 7px 16px;
+    letter-spacing: 1px;
+}
+
+.decision-box,
+.busted-box {
+    background: #E9E5FF;
+    border: 3px solid #3B2A87;
+    color: #3B2A87 !important;
+    border-radius: 13px;
+}
+
+.hit-selected {
+    background: #B8F2D0 !important;
+    border-color: #16854B !important;
+    box-shadow: 0 4px 0 #16854B;
+}
+
+.stay-selected {
+    background: #FFE69A !important;
+    border-color: #D88400 !important;
+    box-shadow: 0 4px 0 #D88400;
+}
+
+.busted-selected {
+    background: #FFD1D1 !important;
+    border-color: #D63031 !important;
+    box-shadow: 0 4px 0 #D63031;
+}
+
+[class*="st-key-player_1_hit"] div.stButton > button,
+[class*="st-key-player_1_stay"] div.stButton > button {
+    background: #E9E5FF !important;
+    color: #3B2A87 !important;
+    border: 3px solid #3B2A87 !important;
+    box-shadow: 0 4px 0 #3B2A87;
+}
+
+[class*="st-key-player_1_hit"] div.stButton > button *,
+[class*="st-key-player_1_stay"] div.stButton > button * {
+    color: #3B2A87 !important;
+}
+
+[class*="st-key-player_1_hit"] div.stButton > button:hover,
+[class*="st-key-player_1_stay"] div.stButton > button:hover {
+    background: #DCD5FF !important;
+    border-color: #3B2A87 !important;
+}
+
+@media (max-width: 700px) {
+    .block-container { padding-left: 1rem; padding-right: 1rem; }
+    .game-logo { letter-spacing: -1px; }
+    .busted-box { min-width: 170px; }
+    .player-title { font-size: 21px; }
 }
 </style>
 """,
@@ -441,62 +647,91 @@ def build_player_panel_html(player):
 
 
 def show_game_board():
-    player_1_html = build_player_panel_html(st.session_state.players[0])
-    player_3_html = build_player_panel_html(st.session_state.players[2])
-    player_2_html = build_player_panel_html(st.session_state.players[1])
+    def show_player_panel(player):
+        current = current_player()
+        is_current = (
+            player.name == current.name
+            and not st.session_state.game_over
+            and (player.active or st.session_state.turn_phase == "result")
+        )
+        is_human_turn = (
+            st.session_state.mode == "human"
+            and player.is_human
+            and is_current
+            and player.active
+            and not st.session_state.paused
+            and st.session_state.turn_phase == "thinking"
+        )
 
-    board_html = (
-        f'<div class="game-board">'
-        f'<div class="top-player-row">{player_1_html}</div>'
-        f'<div class="bottom-player-row">'
-        f'{player_3_html}'
-        f'{player_2_html}'
-        f'</div>'
-        f'</div>'
-    )
+        if is_current:
+            st.markdown(
+                '<div class="turn-label-wrapper"><span class="current-turn-label">CURRENT TURN</span></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div class="turn-label-wrapper"><span class="turn-label-hidden">CURRENT TURN</span></div>',
+                unsafe_allow_html=True,
+            )
 
-    st.markdown(board_html, unsafe_allow_html=True)
-
-
-def show_human_controls(current):
-    is_human_turn = (
-        st.session_state.mode == "human"
-        and current.is_human
-        and current.active
-        and not st.session_state.paused
-        and not st.session_state.game_over
-        and st.session_state.turn_phase == "thinking"
-    )
-
-    if is_human_turn:
+        title_class = "player-title current-player-title" if is_current else "player-title"
         st.markdown(
-            """
-<div class="human-controls-area">
-    <div class="human-controls-title">Your turn</div>
-</div>
-""",
+            f'<div class="{title_class}">{html.escape(player.name.upper())}</div>',
             unsafe_allow_html=True,
         )
 
-        col1, col2 = st.columns(2)
+        with st.container(border=True):
+            st.markdown(
+                f'<div class="player-stats">'
+                f'⭐ Total score: <strong>{player.total_score}</strong><br>'
+                f'🎯 This round: <strong>{player.current_score()}</strong><br>'
+                f'🃏 Cards: <strong>{html.escape(get_cards_text(player))}</strong>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
-        with col1:
-            if st.button("Hit"):
-                execute_current_turn("hit")
-                st.rerun()
+            if is_human_turn:
+                hit_col, stay_col = st.columns(2)
+                with hit_col:
+                    if st.button("HIT", key="player_1_hit", use_container_width=True):
+                        execute_current_turn("hit")
+                        st.rerun()
+                with stay_col:
+                    if st.button(
+                        "STAY",
+                        key="player_1_stay",
+                        disabled=not player.has_any_card(),
+                        use_container_width=True,
+                    ):
+                        execute_current_turn("stay")
+                        st.rerun()
+            else:
+                last_decision = st.session_state.last_decisions.get(player.name)
+                hit_class = "decision-box hit-selected" if is_current and last_decision == "hit" else "decision-box"
+                stay_class = "decision-box stay-selected" if is_current and last_decision == "stay" else "decision-box"
+                st.markdown(
+                    f'<div class="decision-top-row">'
+                    f'<div class="{hit_class}">HIT</div>'
+                    f'<div class="{stay_class}">STAY</div>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
 
-        with col2:
-            stay_disabled = not current.has_any_card()
+            if player.busted:
+                st.markdown(
+                    '<div class="busted-row"><div class="busted-box busted-selected">💥 BUSTED</div></div>',
+                    unsafe_allow_html=True,
+                )
 
-            if st.button("Stay", disabled=stay_disabled):
-                execute_current_turn("stay")
-                st.rerun()
+    top_left, top_center, top_right = st.columns([1, 2, 1])
+    with top_center:
+        show_player_panel(st.session_state.players[0])
 
-    else:
-        st.markdown(
-            '<div class="human-controls-placeholder"></div>',
-            unsafe_allow_html=True,
-        )
+    bottom_left, bottom_right = st.columns(2)
+    with bottom_left:
+        show_player_panel(st.session_state.players[2])
+    with bottom_right:
+        show_player_panel(st.session_state.players[1])
 
 
 if "game_started" not in st.session_state:
@@ -512,20 +747,31 @@ if "pending_round_finish" not in st.session_state:
     st.session_state.pending_round_finish = False
 
 
-st.title("Flip 7: 3-Player Round Demo")
+st.markdown(
+    '<div class="game-logo">FLIP <span class="game-logo-seven">7</span></div>'
+    '<div class="game-subtitle">Draw cards, dodge duplicates, and race to 200 points!</div>',
+    unsafe_allow_html=True,
+)
 
 if not st.session_state.game_started:
-    st.write("Choose how Player 1 should play.")
+    st.markdown(
+        '<div class="main-status"><div class="round-count">CHOOSE YOUR GAME</div></div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="game-subtitle">Take the first seat or sit back and watch the bots battle.</div>',
+        unsafe_allow_html=True,
+    )
 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("Automatic"):
+        if st.button("🤖 WATCH THE BOTS", use_container_width=True):
             initialize_game("automatic")
             st.rerun()
 
     with col2:
-        if st.button("Play Yourself"):
+        if st.button("🎮 PLAY YOURSELF", use_container_width=True):
             initialize_game("human")
             st.rerun()
 
@@ -543,22 +789,20 @@ else:
         button_col1, button_col2 = st.columns(2)
 
         with button_col1:
-            button_text = "Resume" if st.session_state.paused else "Pause"
+            button_text = "▶ RESUME" if st.session_state.paused else "⏸ PAUSE"
 
-            if st.button(button_text):
+            if st.button(button_text, use_container_width=True):
                 st.session_state.paused = not st.session_state.paused
                 st.rerun()
 
         with button_col2:
-            if st.button("Restart Game"):
+            if st.button("↻ RESTART", use_container_width=True):
                 reset_everything()
 
     if st.session_state.game_over and winner:
         st.success(f"{winner.name} wins the game with {winner.total_score} points!")
 
     current = current_player()
-
-    show_human_controls(current)
 
     show_game_board()
 
