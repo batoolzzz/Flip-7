@@ -1,4 +1,4 @@
-#!/home/batoul/flip7-ml-project/venv/bin/python3
+#!/Users/sarila/work/Flip-7/venv/bin/python3.13
 # -*- coding: utf-8 -*-
 import re
 import sys
