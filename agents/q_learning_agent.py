@@ -14,7 +14,7 @@ def _bucket(value: int, size: int, maximum: int) -> int:
 
 
 class QLearningAgent:
-    name = "Self-Play Star"
+    name = "Self Player"
 
     def __init__(self, q_table=None, epsilon: float = 0.0):
         self.q_table = q_table if q_table is not None else {}

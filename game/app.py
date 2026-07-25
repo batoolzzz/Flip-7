@@ -24,9 +24,9 @@ from game import (
 
 MODEL_PATH = PROJECT_ROOT / "models" / "q_table.json"
 AGENT_OPTIONS = {
-    "🎲 Random Rookie": "random",
-    "📏 Rule Ranger": "rule",
-    "🧠 Self-Play Star": "q_learning",
+    "🎲 Random Player": "random",
+    "📏 Rule Based": "rule",
+    "🧠 Self Player": "q_learning",
 }
 
 THINK_DELAY_SECONDS = 2
@@ -309,6 +309,13 @@ div.stButton > button:hover {
     min-height: 100vh;
 }
 
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+    color: white !important;
+}
+
 .block-container {
     max-width: 1180px;
     padding-top: 1.5rem;
@@ -387,6 +394,19 @@ div.stButton > button:active {
     border-radius: 22px !important;
     box-shadow: 0 8px 0 #3B2A87, 0 14px 25px rgba(32, 23, 82, .2);
     padding: 6px;
+}
+
+[class*="st-key-player_card_"] {
+    background: #FFE66D !important;
+    border: 4px solid #3B2A87 !important;
+    border-radius: 22px !important;
+    box-shadow: 0 8px 0 #3B2A87, 0 14px 25px rgba(32, 23, 82, .2) !important;
+}
+
+[class*="st-key-player_card_"] [data-testid="stVerticalBlockBorderWrapper"],
+[class*="st-key-player_card_"] [data-testid="stVerticalBlock"] {
+    background: #FFE66D !important;
+    border-radius: 18px !important;
 }
 
 .player-title {
@@ -495,9 +515,9 @@ def initialize_game(mode):
     ]
 
     selected_types = [
-        AGENT_OPTIONS[st.session_state.get("player_1_agent_choice", "📏 Rule Ranger")],
-        AGENT_OPTIONS[st.session_state.get("player_2_agent_choice", "📏 Rule Ranger")],
-        AGENT_OPTIONS[st.session_state.get("player_3_agent_choice", "🧠 Self-Play Star")],
+        AGENT_OPTIONS[st.session_state.get("player_1_agent_choice", "📏 Rule Based")],
+        AGENT_OPTIONS[st.session_state.get("player_2_agent_choice", "📏 Rule Based")],
+        AGENT_OPTIONS[st.session_state.get("player_3_agent_choice", "🧠 Self Player")],
     ]
     st.session_state.player_agents = [
         None if mode == "human" and index == 0 else make_agent(agent_type)
@@ -723,11 +743,8 @@ def show_game_board():
             unsafe_allow_html=True,
         )
 
-        with st.container(border=True):
-            player_index = st.session_state.players.index(player)
-            agent = st.session_state.player_agents[player_index]
-            if agent is not None:
-                st.caption(f"Bot brain: {agent.name}")
+        player_index = st.session_state.players.index(player)
+        with st.container(border=True, key=f"player_card_{player_index}"):
             st.markdown(
                 f'<div class="player-stats">'
                 f'⭐ Total score: <strong>{player.total_score}</strong><br>'
@@ -791,8 +808,8 @@ def show_learning_lab():
         unsafe_allow_html=True,
     )
     st.info(
-        "The Self-Play Star learns by playing against copies of itself. "
-        "Random Rookie and Rule Ranger are only used afterward to test it."
+        "The Self Player learns by playing against copies of itself. "
+        "Random Player and Rule Based are only used afterward to test it."
     )
 
     metric_1, metric_2, metric_3 = st.columns(3)
@@ -815,7 +832,7 @@ def show_learning_lab():
             train_rounds = 5000
 
     if train_rounds:
-        with st.spinner("Three Self-Play Stars are practising together..."):
+        with st.spinner("Three Self Players are practising together..."):
             new_history = train_self_play(
                 agent,
                 train_rounds,
@@ -847,8 +864,8 @@ def show_learning_lab():
     if st.button("🏁 RUN A 300-ROUND BOT CHALLENGE", use_container_width=True):
         with st.spinner("Running fair tests without changing what the AI learned..."):
             st.session_state.benchmarks = {
-                "Random Rookie": evaluate_agent(agent, RandomAgent),
-                "Rule Ranger": evaluate_agent(agent, RuleAgent),
+                "Random Player": evaluate_agent(agent, RandomAgent),
+                "Rule Based": evaluate_agent(agent, RuleAgent),
             }
 
     benchmarks = st.session_state.get("benchmarks")
@@ -879,7 +896,7 @@ def show_learning_lab():
     explanation = agent.explain(example)
     choice = explanation["action"].upper()
     st.success(
-        f"The Self-Play Star chooses **{choice}**. "
+        f"The Self Player chooses **{choice}**. "
         f"Learned value — HIT: {explanation['hit_value']:.1f}, "
         f"STAY: {explanation['stay_value']:.1f}."
     )
@@ -951,7 +968,7 @@ if not st.session_state.game_started:
 
     if not MODEL_PATH.exists():
         st.caption(
-            "💡 The Self-Play Star is still a beginner. Visit the AI Learning Lab "
+            "💡 The Self Player is still a beginner. Visit the AI Learning Lab "
             "to give it its first practice rounds."
         )
 
@@ -1002,7 +1019,7 @@ else:
     if ai_explanation:
         with st.expander(f"🧠 Why did {ai_explanation['player']} choose that?"):
             st.write(
-                f"The Self-Play Star compared its learned values: "
+                f"The Self Player compared its learned values: "
                 f"**HIT {ai_explanation['hit_value']:.1f}** and "
                 f"**STAY {ai_explanation['stay_value']:.1f}**. "
                 f"It chose **{ai_explanation['action'].upper()}** because that choice "

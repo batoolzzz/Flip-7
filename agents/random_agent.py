@@ -6,7 +6,7 @@ from .base_agent import Observation
 
 
 class RandomAgent:
-    name = "Random Rookie"
+    name = "Random Player"
 
     def choose_action(self, observation: Observation, can_stay: bool = True) -> str:
         if not can_stay:

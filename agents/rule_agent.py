@@ -4,7 +4,7 @@ from .base_agent import Observation
 
 
 class RuleAgent:
-    name = "Rule Ranger"
+    name = "Rule Based"
 
     def choose_action(self, observation: Observation, can_stay: bool = True) -> str:
         if not can_stay:

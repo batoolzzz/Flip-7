@@ -3,9 +3,9 @@
 A three-player Streamlit version of Flip 7 that introduces children to
 reinforcement learning. Players can compare three different bot brains:
 
-- **Random Rookie** chooses randomly.
-- **Rule Ranger** follows hand-written rules.
-- **Self-Play Star** uses a Q-table learned only through self-play.
+- **Random Player** chooses randomly.
+- **Rule Based** follows hand-written rules.
+- **Self Player** uses a Q-table learned only through self-play.
 
 The random and rule-based agents are evaluation benchmarks; they do not teach
 the Q-learning agent.
