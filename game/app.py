@@ -1,16 +1,33 @@
 import time
 import html
+import sys
+from pathlib import Path
+
 import streamlit as st
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from agents import QLearningAgent, RandomAgent, RuleAgent
+from agents.base_agent import Observation, observe
+from training import evaluate_agent, train_self_play
 
 from game import (
     Player,
-    bot_decision,
     create_deck,
     player_hits,
     round_is_over,
     stay,
     winner_if_game_over,
 )
+
+MODEL_PATH = PROJECT_ROOT / "models" / "q_table.json"
+AGENT_OPTIONS = {
+    "🎲 Random Rookie": "random",
+    "📏 Rule Ranger": "rule",
+    "🧠 Self-Play Star": "q_learning",
+}
 
 THINK_DELAY_SECONDS = 2
 RESULT_DELAY_SECONDS = 2
@@ -451,6 +468,15 @@ div.stButton > button:active {
 )
 
 
+def make_agent(agent_type):
+    if agent_type == "random":
+        return RandomAgent()
+    if agent_type == "q_learning":
+        agent, _ = QLearningAgent.load(MODEL_PATH)
+        return agent
+    return RuleAgent()
+
+
 def initialize_game(mode):
     st.session_state.game_started = True
     st.session_state.mode = mode
@@ -463,15 +489,25 @@ def initialize_game(mode):
     st.session_state.deck = create_deck()
 
     st.session_state.players = [
-        Player("Player 1", is_human=(mode == "human")),
+        Player("Player 1" if mode == "human" else "Player 1 Bot", is_human=(mode == "human")),
         Player("Player 2 Bot"),
         Player("Player 3 Bot"),
     ]
 
+    selected_types = [
+        AGENT_OPTIONS[st.session_state.get("player_1_agent_choice", "📏 Rule Ranger")],
+        AGENT_OPTIONS[st.session_state.get("player_2_agent_choice", "📏 Rule Ranger")],
+        AGENT_OPTIONS[st.session_state.get("player_3_agent_choice", "🧠 Self-Play Star")],
+    ]
+    st.session_state.player_agents = [
+        None if mode == "human" and index == 0 else make_agent(agent_type)
+        for index, agent_type in enumerate(selected_types)
+    ]
+    st.session_state.agent_types = selected_types
+    st.session_state.last_ai_explanation = None
+
     st.session_state.last_decisions = {
-        "Player 1": None,
-        "Player 2 Bot": None,
-        "Player 3 Bot": None,
+        player.name: None for player in st.session_state.players
     }
 
 
@@ -544,7 +580,14 @@ def execute_current_turn(decision=None):
         return
 
     if decision is None:
-        decision = bot_decision(player, st.session_state.deck)
+        agent = st.session_state.player_agents[st.session_state.current_player_index]
+        observation = observe(player, st.session_state.players)
+        decision = agent.choose_action(observation, player.has_any_card())
+        if isinstance(agent, QLearningAgent):
+            st.session_state.last_ai_explanation = {
+                "player": player.name,
+                **agent.explain(observation, player.has_any_card()),
+            }
 
     if decision == "stay" and player.has_any_card():
         stay(player)
@@ -681,6 +724,10 @@ def show_game_board():
         )
 
         with st.container(border=True):
+            player_index = st.session_state.players.index(player)
+            agent = st.session_state.player_agents[player_index]
+            if agent is not None:
+                st.caption(f"Bot brain: {agent.name}")
             st.markdown(
                 f'<div class="player-stats">'
                 f'⭐ Total score: <strong>{player.total_score}</strong><br>'
@@ -734,6 +781,115 @@ def show_game_board():
         show_player_panel(st.session_state.players[1])
 
 
+def show_learning_lab():
+    agent, metadata = QLearningAgent.load(MODEL_PATH)
+    trained_rounds = int(metadata.get("trained_rounds", 0))
+    history = list(metadata.get("history", []))
+
+    st.markdown(
+        '<div class="main-status"><div class="round-count">🧠 AI LEARNING LAB</div></div>',
+        unsafe_allow_html=True,
+    )
+    st.info(
+        "The Self-Play Star learns by playing against copies of itself. "
+        "Random Rookie and Rule Ranger are only used afterward to test it."
+    )
+
+    metric_1, metric_2, metric_3 = st.columns(3)
+    metric_1.metric("Practice rounds", f"{trained_rounds:,}")
+    metric_2.metric("Situations learned", f"{len(agent.q_table):,}")
+    metric_3.metric("Exploration now", "0% in real games")
+
+    st.subheader("1. Help the bot practise")
+    st.write(
+        "At first it explores lots of HIT and STAY choices. As it practises, "
+        "it explores less and uses the choices that earned better rewards."
+    )
+    quick_col, deep_col = st.columns(2)
+    train_rounds = None
+    with quick_col:
+        if st.button("⚡ PRACTISE 500 ROUNDS", use_container_width=True):
+            train_rounds = 500
+    with deep_col:
+        if st.button("🚀 PRACTISE 5,000 ROUNDS", use_container_width=True):
+            train_rounds = 5000
+
+    if train_rounds:
+        with st.spinner("Three Self-Play Stars are practising together..."):
+            new_history = train_self_play(
+                agent,
+                train_rounds,
+                starting_round=trained_rounds,
+                epsilon_start=0.8 if trained_rounds == 0 else 0.2,
+            )
+            history.extend(new_history)
+            metadata = {
+                "trained_rounds": trained_rounds + train_rounds,
+                "history": history[-100:],
+            }
+            agent.save(MODEL_PATH, metadata)
+        st.success(f"Finished {train_rounds:,} new self-play rounds!")
+        st.rerun()
+
+    if history:
+        st.subheader("2. Watch its learning journey")
+        chart_data = {
+            "Average points": [point["average_score"] for point in history],
+            "Bust rate × 100": [point["bust_rate"] * 100 for point in history],
+        }
+        st.line_chart(chart_data)
+        st.caption(
+            "The line changes because the opponents are learning too. "
+            "That makes self-play harder than memorising one fixed bot."
+        )
+
+    st.subheader("3. Test it against the benchmarks")
+    if st.button("🏁 RUN A 300-ROUND BOT CHALLENGE", use_container_width=True):
+        with st.spinner("Running fair tests without changing what the AI learned..."):
+            st.session_state.benchmarks = {
+                "Random Rookie": evaluate_agent(agent, RandomAgent),
+                "Rule Ranger": evaluate_agent(agent, RuleAgent),
+            }
+
+    benchmarks = st.session_state.get("benchmarks")
+    if benchmarks:
+        columns = st.columns(2)
+        for column, (name, result) in zip(columns, benchmarks.items()):
+            with column:
+                st.metric(f"Win rate vs {name}", f"{result['win_rate']:.0%}")
+                st.write(f"Average points: **{result['average_score']:.1f}**")
+                st.write(f"Bust rate: **{result['bust_rate']:.0%}**")
+
+    st.subheader("4. Ask what the AI would do")
+    explorer_1, explorer_2 = st.columns(2)
+    with explorer_1:
+        example_score = st.slider("Points this round", 0, 70, 25, 5)
+        example_unique = st.slider("Different number cards", 1, 6, 4)
+    with explorer_2:
+        example_second_chance = st.checkbox("Has a Second Chance")
+        st.write("The AI only sees fair, public information—never the hidden deck order.")
+
+    example = Observation(
+        round_score=example_score,
+        unique_cards=example_unique,
+        has_second_chance=example_second_chance,
+        total_score=0,
+        leader_score=0,
+    )
+    explanation = agent.explain(example)
+    choice = explanation["action"].upper()
+    st.success(
+        f"The Self-Play Star chooses **{choice}**. "
+        f"Learned value — HIT: {explanation['hit_value']:.1f}, "
+        f"STAY: {explanation['stay_value']:.1f}."
+    )
+    if explanation["hit_value"] == explanation["stay_value"] == 0:
+        st.warning(
+            "This exact kind of situation has not been learned yet. "
+            "Give the bot more practice and try again!"
+        )
+
+
 if "game_started" not in st.session_state:
     st.session_state.game_started = False
 
@@ -753,6 +909,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+area = st.sidebar.radio("Choose an area", ["🎲 Play", "🧠 Learning Lab"])
+if area == "🧠 Learning Lab":
+    show_learning_lab()
+    st.stop()
+
 if not st.session_state.game_started:
     st.markdown(
         '<div class="main-status"><div class="round-count">CHOOSE YOUR GAME</div></div>',
@@ -762,6 +923,37 @@ if not st.session_state.game_started:
         '<div class="game-subtitle">Take the first seat or sit back and watch the bots battle.</div>',
         unsafe_allow_html=True,
     )
+
+    st.markdown("### Choose each bot's brain")
+    brain_col_1, brain_col_2, brain_col_3 = st.columns(3)
+    choices = list(AGENT_OPTIONS)
+    with brain_col_1:
+        st.selectbox(
+            "Player 1 (watch mode)",
+            choices,
+            index=1,
+            key="player_1_agent_choice",
+        )
+    with brain_col_2:
+        st.selectbox(
+            "Player 2",
+            choices,
+            index=1,
+            key="player_2_agent_choice",
+        )
+    with brain_col_3:
+        st.selectbox(
+            "Player 3",
+            choices,
+            index=2,
+            key="player_3_agent_choice",
+        )
+
+    if not MODEL_PATH.exists():
+        st.caption(
+            "💡 The Self-Play Star is still a beginner. Visit the AI Learning Lab "
+            "to give it its first practice rounds."
+        )
 
     col1, col2 = st.columns(2)
 
@@ -805,6 +997,17 @@ else:
     current = current_player()
 
     show_game_board()
+
+    ai_explanation = st.session_state.get("last_ai_explanation")
+    if ai_explanation:
+        with st.expander(f"🧠 Why did {ai_explanation['player']} choose that?"):
+            st.write(
+                f"The Self-Play Star compared its learned values: "
+                f"**HIT {ai_explanation['hit_value']:.1f}** and "
+                f"**STAY {ai_explanation['stay_value']:.1f}**. "
+                f"It chose **{ai_explanation['action'].upper()}** because that choice "
+                f"worked better during self-play in similar situations."
+            )
 
     should_auto_think = (
         not st.session_state.paused
