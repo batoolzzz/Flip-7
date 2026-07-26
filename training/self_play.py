@@ -6,6 +6,13 @@ from agents.base_agent import observe
 from agents.q_learning_agent import QLearningAgent
 from game import Player, create_deck, player_hits, round_is_over, stay
 
+# A bust already produces a round score of zero, so only add a small extra
+# penalty.  Flip 7 needs a stronger bonus to make calculated risk worthwhile,
+# while the winner bonus should not overpower the value of exploring.
+BUST_PENALTY = 10
+FLIP_SEVEN_BONUS = 40
+WIN_BONUS = 35
+
 
 def _play_round(agents, learning_agent: QLearningAgent | None = None):
     players = [Player(f"Player {index + 1}") for index in range(3)]
@@ -38,11 +45,11 @@ def _play_round(agents, learning_agent: QLearningAgent | None = None):
             player = players[index]
             terminal_reward = scores[index]
             if player.busted:
-                terminal_reward -= 25
+                terminal_reward -= BUST_PENALTY
             if player.flipped_seven:
-                terminal_reward += 20
+                terminal_reward += FLIP_SEVEN_BONUS
             if scores.count(best_score) == 1 and scores[index] == best_score:
-                terminal_reward += 50
+                terminal_reward += WIN_BONUS
 
             for position in range(len(history) - 1, -1, -1):
                 observation, action = history[position]

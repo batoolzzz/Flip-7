@@ -811,6 +811,8 @@ def show_learning_lab():
         "The Self Player learns by playing against copies of itself. "
         "Random Player and Rule Based are only used afterward to test it."
     )
+    if st.session_state.pop("training_was_reset", False):
+        st.success("AI training was reset. The Self Player is starting fresh.")
 
     metric_1, metric_2, metric_3 = st.columns(3)
     metric_1.metric("Practice rounds", f"{trained_rounds:,}")
@@ -847,6 +849,28 @@ def show_learning_lab():
             agent.save(MODEL_PATH, metadata)
         st.success(f"Finished {train_rounds:,} new self-play rounds!")
         st.rerun()
+
+    with st.expander("Reset AI training"):
+        st.warning(
+            "This permanently clears the Self Player's learned choices, practice "
+            "round count, learning graph, and saved benchmark results."
+        )
+        reset_confirmed = st.checkbox(
+            "I understand and want the Self Player to start from scratch.",
+            key="confirm_training_reset",
+        )
+        if st.button(
+            "🗑️ RESET AI TRAINING",
+            disabled=not reset_confirmed,
+            use_container_width=True,
+        ):
+            QLearningAgent().save(
+                MODEL_PATH,
+                {"trained_rounds": 0, "history": []},
+            )
+            st.session_state.pop("benchmarks", None)
+            st.session_state.training_was_reset = True
+            st.rerun()
 
     if history:
         st.subheader("2. Watch its learning journey")
