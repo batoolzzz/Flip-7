@@ -19,6 +19,8 @@ class Player:
     flipped_seven: bool = False
     total_score: int = 0
     last_action: str = "Waiting"
+    pending_flip_three: bool = False
+    pending_freeze: bool = False
 
     def reset_round(self):
         self.number_cards = []
@@ -31,6 +33,8 @@ class Player:
         self.frozen = False
         self.flipped_seven = False
         self.last_action = "Waiting"
+        self.pending_flip_three = False
+        self.pending_freeze = False
 
     def visible_cards(self):
         return self.display_cards
@@ -272,7 +276,48 @@ def resolve_flip_three(target, deck, log):
             )
 
 
-def player_hits(player, players, deck):
+def play_flip_three(actor, target, deck):
+    """Assign a drawn Flip Three to a chosen active player and resolve it."""
+
+    if not actor.pending_flip_three:
+        raise ValueError(f"{actor.name} does not have a pending Flip Three.")
+    if not target.active:
+        raise ValueError("Flip Three can only be assigned to an active player.")
+
+    log = []
+    actor.pending_flip_three = False
+    target.display_cards.append("Flip Three")
+    actor.last_action = f"Drew Flip Three and played it on {target.name}."
+    log.append(f"{actor.name}: {actor.last_action}")
+    resolve_flip_three(target, deck, log)
+    return log
+
+
+def play_freeze(actor, target):
+    """Assign a drawn Freeze card to a chosen active player."""
+
+    if not actor.pending_freeze:
+        raise ValueError(f"{actor.name} does not have a pending Freeze card.")
+    if not target.active:
+        raise ValueError("Freeze can only be assigned to an active player.")
+
+    actor.pending_freeze = False
+    freeze_player(target)
+    frozen_result = target.last_action
+    actor.last_action = f"Drew Freeze and played it on {target.name}."
+    return [
+        f"{actor.name}: {actor.last_action}",
+        f"{target.name}: {frozen_result}",
+    ]
+
+
+def player_hits(
+    player,
+    players,
+    deck,
+    defer_flip_three=False,
+    defer_freeze=False,
+):
     log = []
 
     if not player.active:
@@ -297,18 +342,20 @@ def player_hits(player, players, deck):
         log.append(f"{target.name}: {target.last_action}")
 
     elif action_name == "Freeze":
-        freeze_player(target)
-
-        player.last_action = f"Drew Freeze and played it on {target.name}."
-        log.append(f"{player.name}: {player.last_action}")
-        log.append(f"{target.name}: {target.last_action}")
+        player.pending_freeze = True
+        if defer_freeze:
+            player.last_action = "Drew Freeze and is choosing who gets it."
+            log.append(f"{player.name}: {player.last_action}")
+            return log
+        log.extend(play_freeze(player, target))
 
     elif action_name == "Flip Three":
-        target.display_cards.append("Flip Three")
-
-        player.last_action = f"Drew Flip Three and played it on {target.name}."
-        log.append(f"{player.name}: {player.last_action}")
-        resolve_flip_three(target, deck, log)
+        player.pending_flip_three = True
+        if defer_flip_three:
+            player.last_action = "Drew Flip Three and is choosing who gets it."
+            log.append(f"{player.name}: {player.last_action}")
+            return log
+        log.extend(play_flip_three(player, target, deck))
 
     return log
 

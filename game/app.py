@@ -12,10 +12,13 @@ if str(PROJECT_ROOT) not in sys.path:
 from agents import QLearningAgent, RandomAgent, RuleAgent
 from agents.base_agent import Observation, observe
 from training import evaluate_agent, train_self_play
+from game.personalization import character_profile, hannah_learning_level
 
 from game import (
     Player,
     create_deck,
+    play_freeze,
+    play_flip_three,
     player_hits,
     round_is_over,
     stay,
@@ -24,9 +27,9 @@ from game import (
 
 MODEL_PATH = PROJECT_ROOT / "models" / "q_table.json"
 AGENT_OPTIONS = {
-    "🎲 Random Player": "random",
-    "📏 Rule Based": "rule",
-    "🧠 Self Player": "q_learning",
+    "🎲 Riley (random robot)": "random",
+    "📏 Felix (rule-following fox)": "rule",
+    "🧠 Hannah (learning AI)": "q_learning",
 }
 
 THINK_DELAY_SECONDS = 2
@@ -37,11 +40,6 @@ st.set_page_config(page_title="Flip 7 Demo", layout="wide")
 st.markdown(
     """
 <style>
-* {
-    transition: none !important;
-    animation: none !important;
-}
-
 .stApp {
     background-color: #FFE66D;
 }
@@ -299,12 +297,12 @@ div.stButton > button:hover {
     box-shadow: 0 0 10px rgba(204, 0, 0, 0.7);
 }
 
-/* Playful board-game theme */
+/* Sunny yellow board-game theme */
 .stApp {
     background:
-        radial-gradient(circle at 12% 18%, rgba(255,255,255,.28) 0 5px, transparent 6px),
-        radial-gradient(circle at 88% 32%, rgba(255,255,255,.22) 0 7px, transparent 8px),
-        linear-gradient(145deg, #6C5CE7 0%, #8A6DE9 48%, #36C5B5 100%);
+        radial-gradient(circle at 12% 18%, rgba(255,255,255,.45) 0 5px, transparent 6px),
+        radial-gradient(circle at 88% 32%, rgba(255,255,255,.35) 0 7px, transparent 8px),
+        linear-gradient(145deg, #FFF6B0 0%, #FFE066 48%, #F7C934 100%);
     background-size: 90px 90px, 130px 130px, auto;
     min-height: 100vh;
 }
@@ -313,7 +311,7 @@ div.stButton > button:hover {
 [data-testid="stSidebar"] p,
 [data-testid="stSidebar"] span,
 [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
-    color: white !important;
+    color: #3B2F0B !important;
 }
 
 .block-container {
@@ -323,23 +321,23 @@ div.stButton > button:hover {
 }
 
 .game-logo {
-    color: white !important;
+    color: #3B2F0B !important;
     font-family: "Trebuchet MS", Arial, sans-serif;
     font-size: clamp(42px, 7vw, 72px);
     line-height: 1;
     text-align: center;
     font-weight: 1000;
     letter-spacing: -3px;
-    text-shadow: 0 5px 0 #3B2A87, 0 9px 18px rgba(30, 20, 80, .28);
+    text-shadow: 0 5px 0 #FFF4B8, 0 9px 18px rgba(105, 75, 0, .22);
     margin: 4px 0 8px;
 }
 
 .game-logo-seven {
-    color: #FFE66D !important;
+    color: #A64B00 !important;
 }
 
 .game-subtitle {
-    color: white !important;
+    color: #59440A !important;
     text-align: center;
     font-size: 17px;
     font-weight: 800;
@@ -347,16 +345,16 @@ div.stButton > button:hover {
 }
 
 .main-status {
-    background: #FFE66D;
-    border: 4px solid #3B2A87;
+    background: #FFF8D6;
+    border: 4px solid #8B6F00;
     border-radius: 24px;
     padding: 12px 20px;
     margin: 0 0 10px;
-    box-shadow: 0 7px 0 #3B2A87, 0 12px 22px rgba(30, 20, 80, .22);
+    box-shadow: 0 7px 0 #8B6F00, 0 12px 22px rgba(105, 75, 0, .2);
 }
 
 .round-count {
-    color: #3B2A87 !important;
+    color: #5C4300 !important;
     font-family: "Trebuchet MS", Arial, sans-serif;
     font-size: 28px;
     letter-spacing: 2px;
@@ -364,63 +362,63 @@ div.stButton > button:hover {
 }
 
 div.stButton > button {
-    background: #FF6B6B !important;
+    background: #A64B00 !important;
     color: white !important;
-    border: 3px solid #3B2A87 !important;
+    border: 3px solid #5C2A00 !important;
     border-radius: 14px !important;
     min-height: 48px;
     font-family: "Trebuchet MS", Arial, sans-serif;
     font-weight: 900 !important;
-    box-shadow: 0 5px 0 #3B2A87;
+    box-shadow: 0 5px 0 #5C2A00;
     transition: transform .12s ease, box-shadow .12s ease, background .12s ease !important;
 }
 
 div.stButton > button:hover {
-    background: #FF8585 !important;
+    background: #C45A00 !important;
     color: white !important;
-    border-color: #3B2A87 !important;
+    border-color: #5C2A00 !important;
     transform: translateY(-2px);
-    box-shadow: 0 7px 0 #3B2A87;
+    box-shadow: 0 7px 0 #5C2A00;
 }
 
 div.stButton > button:active {
     transform: translateY(3px);
-    box-shadow: 0 2px 0 #3B2A87;
+    box-shadow: 0 2px 0 #5C2A00;
 }
 
 [data-testid="stVerticalBlockBorderWrapper"] {
-    background: rgba(255, 255, 255, .96);
-    border: 4px solid #3B2A87 !important;
+    background: rgba(255, 252, 229, .96);
+    border: 4px solid #8B6F00 !important;
     border-radius: 22px !important;
-    box-shadow: 0 8px 0 #3B2A87, 0 14px 25px rgba(32, 23, 82, .2);
+    box-shadow: 0 8px 0 #8B6F00, 0 14px 25px rgba(105, 75, 0, .18);
     padding: 6px;
 }
 
 [class*="st-key-player_card_"] {
-    background: #FFE66D !important;
-    border: 4px solid #3B2A87 !important;
+    background: #FFF1A8 !important;
+    border: 4px solid #8B6F00 !important;
     border-radius: 22px !important;
-    box-shadow: 0 8px 0 #3B2A87, 0 14px 25px rgba(32, 23, 82, .2) !important;
+    box-shadow: 0 8px 0 #8B6F00, 0 14px 25px rgba(105, 75, 0, .18) !important;
 }
 
 [class*="st-key-player_card_"] [data-testid="stVerticalBlockBorderWrapper"],
 [class*="st-key-player_card_"] [data-testid="stVerticalBlock"] {
-    background: #FFE66D !important;
+    background: #FFF1A8 !important;
     border-radius: 18px !important;
 }
 
 .player-title {
-    color: white !important;
+    color: #3B2F0B !important;
     font-family: "Trebuchet MS", Arial, sans-serif;
     font-size: 25px;
     letter-spacing: .5px;
-    text-shadow: 0 3px 0 #3B2A87;
+    text-shadow: 0 3px 0 #FFF4B8;
     margin-top: 14px;
 }
 
 .current-player-title {
-    color: #FFE66D !important;
-    text-shadow: 0 3px 0 #3B2A87, 0 0 14px rgba(255, 230, 109, .7);
+    color: #8A3E00 !important;
+    text-shadow: 0 3px 0 #FFF4B8, 0 0 14px rgba(255, 255, 255, .75);
 }
 
 .current-turn-label {
@@ -433,9 +431,9 @@ div.stButton > button:active {
 
 .decision-box,
 .busted-box {
-    background: #E9E5FF;
-    border: 3px solid #3B2A87;
-    color: #3B2A87 !important;
+    background: #FFF8D6;
+    border: 3px solid #8B6F00;
+    color: #3B2F0B !important;
     border-radius: 13px;
 }
 
@@ -459,21 +457,21 @@ div.stButton > button:active {
 
 [class*="st-key-player_1_hit"] div.stButton > button,
 [class*="st-key-player_1_stay"] div.stButton > button {
-    background: #E9E5FF !important;
-    color: #3B2A87 !important;
-    border: 3px solid #3B2A87 !important;
-    box-shadow: 0 4px 0 #3B2A87;
+    background: #FFF8D6 !important;
+    color: #3B2F0B !important;
+    border: 3px solid #8B6F00 !important;
+    box-shadow: 0 4px 0 #8B6F00;
 }
 
 [class*="st-key-player_1_hit"] div.stButton > button *,
 [class*="st-key-player_1_stay"] div.stButton > button * {
-    color: #3B2A87 !important;
+    color: #3B2F0B !important;
 }
 
 [class*="st-key-player_1_hit"] div.stButton > button:hover,
 [class*="st-key-player_1_stay"] div.stButton > button:hover {
-    background: #DCD5FF !important;
-    border-color: #3B2A87 !important;
+    background: #FFE88A !important;
+    border-color: #8B6F00 !important;
 }
 
 @media (max-width: 700px) {
@@ -506,19 +504,25 @@ def initialize_game(mode):
     st.session_state.current_player_index = 0
     st.session_state.turn_phase = "thinking"
     st.session_state.pending_round_finish = False
+    st.session_state.pending_flip_three_actor_index = None
+    st.session_state.pending_freeze_actor_index = None
     st.session_state.deck = create_deck()
 
-    st.session_state.players = [
-        Player("Player 1" if mode == "human" else "Player 1 Bot", is_human=(mode == "human")),
-        Player("Player 2 Bot"),
-        Player("Player 3 Bot"),
-    ]
-
     selected_types = [
-        AGENT_OPTIONS[st.session_state.get("player_1_agent_choice", "📏 Rule Based")],
-        AGENT_OPTIONS[st.session_state.get("player_2_agent_choice", "📏 Rule Based")],
-        AGENT_OPTIONS[st.session_state.get("player_3_agent_choice", "🧠 Self Player")],
+        AGENT_OPTIONS[st.session_state.get("player_1_agent_choice", "📏 Felix (rule-following fox)")],
+        AGENT_OPTIONS[st.session_state.get("player_2_agent_choice", "📏 Felix (rule-following fox)")],
+        AGENT_OPTIONS[st.session_state.get("player_3_agent_choice", "🧠 Hannah (learning AI)")],
     ]
+    used_names = {}
+    players = []
+    for index, agent_type in enumerate(selected_types):
+        is_human = mode == "human" and index == 0
+        profile = character_profile(agent_type, is_human=is_human)
+        base_name = profile["name"]
+        used_names[base_name] = used_names.get(base_name, 0) + 1
+        suffix = f" {used_names[base_name]}" if used_names[base_name] > 1 else ""
+        players.append(Player(f"{base_name}{suffix}", is_human=is_human))
+    st.session_state.players = players
     st.session_state.player_agents = [
         None if mode == "human" and index == 0 else make_agent(agent_type)
         for index, agent_type in enumerate(selected_types)
@@ -613,7 +617,77 @@ def execute_current_turn(decision=None):
         stay(player)
         st.session_state.last_decisions[player.name] = "stay"
     else:
-        player_hits(player, st.session_state.players, st.session_state.deck)
+        hit_log = player_hits(
+            player,
+            st.session_state.players,
+            st.session_state.deck,
+            defer_flip_three=player.is_human,
+            defer_freeze=player.is_human,
+        )
+
+        if player.pending_freeze:
+            st.session_state.pending_freeze_actor_index = (
+                st.session_state.current_player_index
+            )
+            st.session_state.last_decisions[player.name] = "hit"
+            st.session_state.turn_phase = "choosing_freeze"
+            return
+
+        if player.pending_flip_three:
+            st.session_state.pending_flip_three_actor_index = (
+                st.session_state.current_player_index
+            )
+            st.session_state.last_decisions[player.name] = "hit"
+            st.session_state.turn_phase = "choosing_flip_three"
+            return
+
+        flip_three_marker = "Drew Flip Three and played it on "
+        assignment = next(
+            (entry for entry in hit_log if flip_three_marker in entry),
+            None,
+        )
+        if assignment and not player.is_human:
+            target_name = assignment.split(flip_three_marker, 1)[1].rstrip(".")
+            human_player = next(
+                (candidate for candidate in st.session_state.players if candidate.is_human),
+                None,
+            )
+            recipient = (
+                "you"
+                if human_player is not None and target_name == human_player.name
+                else target_name
+            )
+            st.session_state.pending_toast = (
+                {
+                    "body": f"{player.name} assigned Flip Three to {recipient}!",
+                    "icon": ":material/style:",
+                }
+            )
+
+        freeze_marker = "Drew Freeze and played it on "
+        freeze_assignment = next(
+            (entry for entry in hit_log if freeze_marker in entry),
+            None,
+        )
+        if freeze_assignment and not player.is_human:
+            target_name = freeze_assignment.split(freeze_marker, 1)[1].rstrip(".")
+            target = next(
+                candidate
+                for candidate in st.session_state.players
+                if candidate.name == target_name
+            )
+            recipient = "you" if target.is_human else target.name
+            effect = (
+                f" {target.current_score()} round points were banked."
+                if target.is_human
+                else ""
+            )
+            st.session_state.pending_toast = (
+                {
+                    "body": f"{player.name} assigned Freeze to {recipient}!{effect}",
+                    "icon": ":material/ac_unit:",
+                }
+            )
 
         if player.busted:
             st.session_state.last_decisions[player.name] = "busted"
@@ -632,6 +706,84 @@ def advance_after_result():
     reset_last_decisions()
     move_to_next_active_player()
     st.session_state.turn_phase = "thinking"
+
+
+@st.dialog(
+    "Choose who gets Flip Three",
+    dismissible=False,
+    icon=":material/style:",
+)
+def choose_flip_three_target():
+    actor_index = st.session_state.get("pending_flip_three_actor_index")
+    if actor_index is None:
+        st.rerun()
+
+    actor = st.session_state.players[actor_index]
+    st.write(
+        "You drew **Flip Three**. Choose yourself or another active player. "
+        "That player must immediately take up to three cards."
+    )
+
+    for target_index, target in enumerate(st.session_state.players):
+        if not target.active:
+            continue
+        label = (
+            "TAKE THREE CARDS MYSELF"
+            if target_index == actor_index
+            else f"GIVE FLIP THREE TO {target.name.upper()}"
+        )
+        if st.button(
+            label,
+            key=f"flip_three_target_{target_index}",
+            width="stretch",
+        ):
+            play_flip_three(actor, target, st.session_state.deck)
+            st.session_state.pending_flip_three_actor_index = None
+            st.session_state.last_decisions[actor.name] = "hit"
+            st.session_state.pending_round_finish = round_is_over(
+                st.session_state.players
+            )
+            st.session_state.turn_phase = "result"
+            st.rerun()
+
+
+@st.dialog(
+    "Choose who gets Freeze",
+    dismissible=False,
+    icon=":material/ac_unit:",
+)
+def choose_freeze_target():
+    actor_index = st.session_state.get("pending_freeze_actor_index")
+    if actor_index is None:
+        st.rerun()
+
+    actor = st.session_state.players[actor_index]
+    st.write(
+        "You drew **Freeze**. Choose yourself or another active player. "
+        "That player banks their current points and leaves this round."
+    )
+
+    for target_index, target in enumerate(st.session_state.players):
+        if not target.active:
+            continue
+        label = (
+            "FREEZE MYSELF"
+            if target_index == actor_index
+            else f"GIVE FREEZE TO {target.name.upper()}"
+        )
+        if st.button(
+            label,
+            key=f"freeze_target_{target_index}",
+            width="stretch",
+        ):
+            play_freeze(actor, target)
+            st.session_state.pending_freeze_actor_index = None
+            st.session_state.last_decisions[actor.name] = "hit"
+            st.session_state.pending_round_finish = round_is_over(
+                st.session_state.players
+            )
+            st.session_state.turn_phase = "result"
+            st.rerun()
 
 
 def get_cards_text(player):
@@ -737,14 +889,19 @@ def show_game_board():
                 unsafe_allow_html=True,
             )
 
+        player_index = st.session_state.players.index(player)
+        agent_type = st.session_state.agent_types[player_index]
+        profile = character_profile(agent_type, is_human=player.is_human)
         title_class = "player-title current-player-title" if is_current else "player-title"
         st.markdown(
             f'<div class="{title_class}">{html.escape(player.name.upper())}</div>',
             unsafe_allow_html=True,
         )
 
-        player_index = st.session_state.players.index(player)
         with st.container(border=True, key=f"player_card_{player_index}"):
+            with st.container(horizontal_alignment="center", gap=None):
+                st.image(str(profile["avatar"]), width=132)
+                st.caption(profile["subtitle"], text_alignment="center")
             st.markdown(
                 f'<div class="player-stats">'
                 f'⭐ Total score: <strong>{player.total_score}</strong><br>'
@@ -757,7 +914,7 @@ def show_game_board():
             if is_human_turn:
                 hit_col, stay_col = st.columns(2)
                 with hit_col:
-                    if st.button("HIT", key="player_1_hit", use_container_width=True):
+                    if st.button("HIT", key="player_1_hit", width="stretch"):
                         execute_current_turn("hit")
                         st.rerun()
                 with stay_col:
@@ -765,7 +922,7 @@ def show_game_board():
                         "STAY",
                         key="player_1_stay",
                         disabled=not player.has_any_card(),
-                        use_container_width=True,
+                        width="stretch",
                     ):
                         execute_current_turn("stay")
                         st.rerun()
@@ -804,37 +961,50 @@ def show_learning_lab():
     history = list(metadata.get("history", []))
 
     st.markdown(
-        '<div class="main-status"><div class="round-count">🧠 AI LEARNING LAB</div></div>',
+        '<div class="main-status"><div class="round-count">HANNAH\'S LEARNING LAB</div></div>',
         unsafe_allow_html=True,
     )
     st.info(
-        "The Self Player learns by playing against copies of itself. "
-        "Random Player and Rule Based are only used afterward to test it."
+        "Hannah learns by playing practice games against copies of herself. "
+        "Riley and Felix are only used afterward to test what she learned."
     )
     if st.session_state.pop("training_was_reset", False):
-        st.success("AI training was reset. The Self Player is starting fresh.")
+        st.success("Hannah's training was reset. She is starting fresh.")
+
+    learning = hannah_learning_level(trained_rounds)
+    intro_portrait, intro_progress = st.columns([1, 3], vertical_alignment="center")
+    with intro_portrait:
+        st.image(str(character_profile("q_learning")["avatar"]), width=160)
+    with intro_progress:
+        st.subheader(f"Level {learning['level']}: {learning['title']}")
+        if learning["next_rounds"] is None:
+            progress_text = "Top practice level reached — Hannah can still keep learning!"
+        else:
+            progress_text = f"{learning['rounds_to_next']:,} more rounds to reach the next level"
+        st.progress(learning["progress"], text=progress_text)
+        st.caption("Levels count real self-play practice rounds saved in Hannah's learning file.")
 
     metric_1, metric_2, metric_3 = st.columns(3)
     metric_1.metric("Practice rounds", f"{trained_rounds:,}")
     metric_2.metric("Situations learned", f"{len(agent.q_table):,}")
     metric_3.metric("Exploration now", "0% in real games")
 
-    st.subheader("1. Help the bot practise")
+    st.subheader("1. Help Hannah practise")
     st.write(
-        "At first it explores lots of HIT and STAY choices. As it practises, "
-        "it explores less and uses the choices that earned better rewards."
+        "At first Hannah explores lots of HIT and STAY choices. As she practises, "
+        "she explores less and uses the choices that earned better rewards."
     )
     quick_col, deep_col = st.columns(2)
     train_rounds = None
     with quick_col:
-        if st.button("⚡ PRACTISE 500 ROUNDS", use_container_width=True):
+        if st.button("⚡ PRACTISE 500 ROUNDS", width="stretch"):
             train_rounds = 500
     with deep_col:
-        if st.button("🚀 PRACTISE 5,000 ROUNDS", use_container_width=True):
+        if st.button("🚀 PRACTISE 5,000 ROUNDS", width="stretch"):
             train_rounds = 5000
 
     if train_rounds:
-        with st.spinner("Three Self Players are practising together..."):
+        with st.spinner("Three copies of Hannah are practising together..."):
             new_history = train_self_play(
                 agent,
                 train_rounds,
@@ -852,17 +1022,17 @@ def show_learning_lab():
 
     with st.expander("Reset AI training"):
         st.warning(
-            "This permanently clears the Self Player's learned choices, practice "
+            "This permanently clears Hannah's learned choices, practice "
             "round count, learning graph, and saved benchmark results."
         )
         reset_confirmed = st.checkbox(
-            "I understand and want the Self Player to start from scratch.",
+            "I understand and want Hannah to start from scratch.",
             key="confirm_training_reset",
         )
         if st.button(
             "🗑️ RESET AI TRAINING",
             disabled=not reset_confirmed,
-            use_container_width=True,
+            width="stretch",
         ):
             QLearningAgent().save(
                 MODEL_PATH,
@@ -873,23 +1043,35 @@ def show_learning_lab():
             st.rerun()
 
     if history:
-        st.subheader("2. Watch its learning journey")
-        chart_data = {
-            "Average points": [point["average_score"] for point in history],
-            "Bust rate × 100": [point["bust_rate"] * 100 for point in history],
+        st.subheader("2. Watch Hannah get smarter")
+        st.area_chart(
+            history,
+            x="round",
+            y="states_learned",
+            x_label="Practice round",
+            y_label="Situations learned",
+            color="#6C5CE7",
+        )
+        st.caption(
+            "Each new situation is another card pattern Hannah has practised. "
+            "Her growing memory is saved and used in future games."
+        )
+        performance_data = {
+            "Hannah's average points": [point["average_score"] for point in history],
+            "Hannah's bust rate × 100": [point["bust_rate"] * 100 for point in history],
         }
-        st.line_chart(chart_data)
+        st.line_chart(performance_data)
         st.caption(
             "The line changes because the opponents are learning too. "
             "That makes self-play harder than memorising one fixed bot."
         )
 
-    st.subheader("3. Test it against the benchmarks")
-    if st.button("🏁 RUN A 300-ROUND BOT CHALLENGE", use_container_width=True):
+    st.subheader("3. Test Hannah against the other characters")
+    if st.button("🏁 RUN A 300-ROUND BOT CHALLENGE", width="stretch"):
         with st.spinner("Running fair tests without changing what the AI learned..."):
             st.session_state.benchmarks = {
-                "Random Player": evaluate_agent(agent, RandomAgent),
-                "Rule Based": evaluate_agent(agent, RuleAgent),
+                "Riley": evaluate_agent(agent, RandomAgent),
+                "Felix": evaluate_agent(agent, RuleAgent),
             }
 
     benchmarks = st.session_state.get("benchmarks")
@@ -920,14 +1102,14 @@ def show_learning_lab():
     explanation = agent.explain(example)
     choice = explanation["action"].upper()
     st.success(
-        f"The Self Player chooses **{choice}**. "
+        f"Hannah chooses **{choice}**. "
         f"Learned value — HIT: {explanation['hit_value']:.1f}, "
         f"STAY: {explanation['stay_value']:.1f}."
     )
     if explanation["hit_value"] == explanation["stay_value"] == 0:
         st.warning(
             "This exact kind of situation has not been learned yet. "
-            "Give the bot more practice and try again!"
+            "Give Hannah more practice and try again!"
         )
 
 
@@ -942,6 +1124,22 @@ if "turn_phase" not in st.session_state:
 
 if "pending_round_finish" not in st.session_state:
     st.session_state.pending_round_finish = False
+
+if "pending_flip_three_actor_index" not in st.session_state:
+    st.session_state.pending_flip_three_actor_index = None
+
+if "pending_freeze_actor_index" not in st.session_state:
+    st.session_state.pending_freeze_actor_index = None
+
+pending_toast = st.session_state.pop("pending_toast", None)
+if pending_toast:
+    if isinstance(pending_toast, str):
+        pending_toast = {"body": pending_toast, "icon": ":material/style:"}
+    st.toast(
+        pending_toast["body"],
+        icon=pending_toast["icon"],
+        duration="short",
+    )
 
 
 st.markdown(
@@ -992,19 +1190,19 @@ if not st.session_state.game_started:
 
     if not MODEL_PATH.exists():
         st.caption(
-            "💡 The Self Player is still a beginner. Visit the AI Learning Lab "
-            "to give it its first practice rounds."
+            "💡 Hannah is still a beginner. Visit her Learning Lab "
+            "to give her the first practice rounds."
         )
 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("🤖 WATCH THE BOTS", use_container_width=True):
+        if st.button("🤖 WATCH THE BOTS", width="stretch"):
             initialize_game("automatic")
             st.rerun()
 
     with col2:
-        if st.button("🎮 PLAY YOURSELF", use_container_width=True):
+        if st.button("🎮 PLAY YOURSELF", width="stretch"):
             initialize_game("human")
             st.rerun()
 
@@ -1024,12 +1222,12 @@ else:
         with button_col1:
             button_text = "▶ RESUME" if st.session_state.paused else "⏸ PAUSE"
 
-            if st.button(button_text, use_container_width=True):
+            if st.button(button_text, width="stretch"):
                 st.session_state.paused = not st.session_state.paused
                 st.rerun()
 
         with button_col2:
-            if st.button("↻ RESTART", use_container_width=True):
+            if st.button("↻ RESTART", width="stretch"):
                 reset_everything()
 
     if st.session_state.game_over and winner:
@@ -1039,11 +1237,23 @@ else:
 
     show_game_board()
 
+    if (
+        st.session_state.turn_phase == "choosing_freeze"
+        and st.session_state.pending_freeze_actor_index is not None
+    ):
+        choose_freeze_target()
+
+    if (
+        st.session_state.turn_phase == "choosing_flip_three"
+        and st.session_state.pending_flip_three_actor_index is not None
+    ):
+        choose_flip_three_target()
+
     ai_explanation = st.session_state.get("last_ai_explanation")
     if ai_explanation:
         with st.expander(f"🧠 Why did {ai_explanation['player']} choose that?"):
             st.write(
-                f"The Self Player compared its learned values: "
+                f"Hannah compared her learned values: "
                 f"**HIT {ai_explanation['hit_value']:.1f}** and "
                 f"**STAY {ai_explanation['stay_value']:.1f}**. "
                 f"It chose **{ai_explanation['action'].upper()}** because that choice "

@@ -3,6 +3,8 @@
 from .game import (
     Player,
     create_deck,
+    play_freeze,
+    play_flip_three,
     player_hits,
     round_is_over,
     stay,
@@ -12,6 +14,8 @@ from .game import (
 __all__ = [
     "Player",
     "create_deck",
+    "play_freeze",
+    "play_flip_three",
     "player_hits",
     "round_is_over",
     "stay",
