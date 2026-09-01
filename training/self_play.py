@@ -1,15 +1,15 @@
 """Fast self-play training and evaluation for the tabular agent."""
 
+import math
 import random
 
 from agents.base_agent import observe
 from agents.q_learning_agent import QLearningAgent
 from game import Player, create_deck, player_hits, round_is_over, stay
 
-# A bust already produces a round score of zero, so only add a small extra
-# penalty.  Flip 7 needs a stronger bonus to make calculated risk worthwhile,
-# while the winner bonus should not overpower the value of exploring.
-BUST_PENALTY = 10
+# A bust already produces a score of zero.  An extra negative penalty teaches
+# excessive caution, so the outcome itself is the complete bust penalty.
+BUST_PENALTY = 0
 FLIP_SEVEN_BONUS = 40
 WIN_BONUS = 35
 
@@ -51,15 +51,17 @@ def _play_round(agents, learning_agent: QLearningAgent | None = None):
             if scores.count(best_score) == 1 and scores[index] == best_score:
                 terminal_reward += WIN_BONUS
 
-            for position in range(len(history) - 1, -1, -1):
-                observation, action = history[position]
-                next_observation = (
-                    history[position + 1][0]
-                    if position + 1 < len(history)
-                    else None
+            # Every decision contributed to the terminal outcome.  Updating
+            # each one directly toward that outcome is an undiscounted Monte
+            # Carlo return.  The previous bootstrapped update accidentally
+            # gave STAY the whole reward and discounted the HITs that built it.
+            for observation, action in history:
+                learning_agent.update(
+                    observation,
+                    action,
+                    terminal_reward,
+                    next_observation=None,
                 )
-                reward = terminal_reward if position == len(history) - 1 else 0.0
-                learning_agent.update(observation, action, reward, next_observation)
 
     return players, scores
 
@@ -68,7 +70,7 @@ def train_self_play(
     agent: QLearningAgent,
     rounds: int,
     starting_round: int = 0,
-    epsilon_start: float = 0.8,
+    epsilon_start: float | None = None,
     epsilon_end: float = 0.05,
 ):
     """Train only against copies that share the same evolving Q-table."""
@@ -78,8 +80,16 @@ def train_self_play(
     bust_window = []
 
     for episode in range(rounds):
-        progress = episode / max(1, rounds - 1)
-        epsilon = epsilon_start + progress * (epsilon_end - epsilon_start)
+        if epsilon_start is None:
+            # Use the saved, lifetime round count so separate UI training
+            # clicks continue the same schedule instead of restarting it.
+            epsilon = max(
+                epsilon_end,
+                0.8 * math.exp(-(starting_round + episode) / 2500),
+            )
+        else:
+            progress = episode / max(1, rounds - 1)
+            epsilon = epsilon_start + progress * (epsilon_end - epsilon_start)
         self_players = [QLearningAgent(agent.q_table, epsilon) for _ in range(3)]
         players, scores = _play_round(self_players, learning_agent=agent)
         score_window.extend(scores)

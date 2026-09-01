@@ -5,7 +5,13 @@ from pathlib import Path
 from agents import QLearningAgent, RandomAgent, RuleAgent
 from agents.base_agent import Observation
 from training import train_self_play
-from game import Player, play_freeze, play_flip_three, player_hits
+from game import (
+    Player,
+    play_freeze,
+    play_flip_three,
+    player_hits,
+    special_card_pass_message,
+)
 from game.personalization import character_profile, hannah_learning_level
 
 
@@ -94,6 +100,18 @@ class AgentTests(unittest.TestCase):
             any("Hannah: Drew Freeze and played it on You." in line for line in log)
         )
 
+    def test_special_card_pass_notifications_use_player_names(self):
+        hannah = Player("Hannah")
+        human = Player("You", is_human=True)
+        self.assertEqual(
+            special_card_pass_message(hannah, human, "Freeze"),
+            "Hannah passed Freeze card to You.",
+        )
+        self.assertEqual(
+            special_card_pass_message(human, hannah, "Flip Three"),
+            "You passed Flip Three card to Hannah.",
+        )
+
     def test_agents_hit_before_staying_is_legal(self):
         for agent in (RandomAgent(), RuleAgent(), QLearningAgent()):
             self.assertEqual(agent.choose_action(observation(), can_stay=False), "hit")
@@ -114,13 +132,36 @@ class AgentTests(unittest.TestCase):
             agent.save(path, {"trained_rounds": 1})
             restored, metadata = QLearningAgent.load(path)
             self.assertEqual(restored.q_table, agent.q_table)
+            self.assertEqual(restored.visit_counts, agent.visit_counts)
             self.assertEqual(metadata["trained_rounds"], 1)
+
+    def test_hannah_distinguishes_hands_with_different_duplicate_risk(self):
+        safe = observation(score=30, unique=3)
+        risky = Observation(30, 3, False, 0, 0, bust_risk=0.3)
+        self.assertNotEqual(
+            QLearningAgent.state_key(safe),
+            QLearningAgent.state_key(risky),
+        )
+
+    def test_all_actions_receive_the_terminal_round_result(self):
+        agent = QLearningAgent()
+        first = observation(score=10, unique=1)
+        last = observation(score=25, unique=3)
+        agent.update(first, "hit", 25, None)
+        agent.update(last, "stay", 25, None)
+        self.assertEqual(agent.values(first)["hit"], 25)
+        self.assertEqual(agent.values(last)["stay"], 25)
 
     def test_self_play_learns_without_baseline_agents(self):
         agent = QLearningAgent()
         history = train_self_play(agent, 20)
         self.assertTrue(agent.q_table)
         self.assertTrue(history)
+
+    def test_later_training_does_not_restart_high_exploration(self):
+        agent = QLearningAgent()
+        history = train_self_play(agent, 2, starting_round=10_000)
+        self.assertLessEqual(history[-1]["epsilon"], 0.051)
 
 
 if __name__ == "__main__":

@@ -16,9 +16,10 @@ def _bucket(value: int, size: int, maximum: int) -> int:
 class QLearningAgent:
     name = "Hannah"
 
-    def __init__(self, q_table=None, epsilon: float = 0.0):
+    def __init__(self, q_table=None, epsilon: float = 0.0, visit_counts=None):
         self.q_table = q_table if q_table is not None else {}
         self.epsilon = epsilon
+        self.visit_counts = visit_counts if visit_counts is not None else {}
 
     @staticmethod
     def state_key(observation: Observation) -> str:
@@ -28,6 +29,7 @@ class QLearningAgent:
             _bucket(observation.round_score, 5, 14),
             observation.unique_cards,
             int(observation.has_second_chance),
+            min(10, int(observation.bust_risk * 20)),
         )
         return "|".join(str(part) for part in parts)
 
@@ -63,11 +65,19 @@ class QLearningAgent:
         action: str,
         reward: float,
         next_observation: Observation | None,
-        alpha: float = 0.15,
+        alpha: float | None = None,
         gamma: float = 0.92,
     ) -> None:
         key = self.state_key(observation)
         row = self.q_table.setdefault(key, {candidate: 0.0 for candidate in ACTIONS})
+        count_row = self.visit_counts.setdefault(
+            key, {candidate: 0 for candidate in ACTIONS}
+        )
+        count_row[action] = int(count_row.get(action, 0)) + 1
+        if alpha is None:
+            # A diminishing step size keeps later practice from repeatedly
+            # overwriting a well-supported choice with one unusual round.
+            alpha = max(0.02, count_row[action] ** -0.5)
         future = 0.0
         if next_observation is not None:
             future = max(self.values(next_observation).values())
@@ -77,7 +87,11 @@ class QLearningAgent:
     def save(self, path: str | Path, metadata: dict | None = None) -> None:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        payload = {"q_table": self.q_table, "metadata": metadata or {}}
+        payload = {
+            "q_table": self.q_table,
+            "visit_counts": self.visit_counts,
+            "metadata": metadata or {},
+        }
         path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
     @classmethod
@@ -86,4 +100,11 @@ class QLearningAgent:
         if not path.exists():
             return cls(epsilon=epsilon), {}
         payload = json.loads(path.read_text(encoding="utf-8"))
-        return cls(payload.get("q_table", {}), epsilon), payload.get("metadata", {})
+        return (
+            cls(
+                payload.get("q_table", {}),
+                epsilon,
+                payload.get("visit_counts", {}),
+            ),
+            payload.get("metadata", {}),
+        )

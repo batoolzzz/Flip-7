@@ -311,6 +311,12 @@ def play_freeze(actor, target):
     ]
 
 
+def special_card_pass_message(actor, target, card_name):
+    """Build the player-facing notification for a special-card pass."""
+
+    return f"{actor.name} passed {card_name} card to {target.name}."
+
+
 def player_hits(
     player,
     players,

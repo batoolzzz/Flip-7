@@ -21,6 +21,7 @@ from game import (
     play_flip_three,
     player_hits,
     round_is_over,
+    special_card_pass_message,
     stay,
     winner_if_game_over,
 )
@@ -495,6 +496,14 @@ def make_agent(agent_type):
     return RuleAgent()
 
 
+def queue_special_card_notification(actor, target, card_name):
+    icon = ":material/ac_unit:" if card_name == "Freeze" else ":material/style:"
+    st.session_state.pending_toast = {
+        "body": special_card_pass_message(actor, target, card_name),
+        "icon": icon,
+    }
+
+
 def initialize_game(mode):
     st.session_state.game_started = True
     st.session_state.mode = mode
@@ -648,21 +657,12 @@ def execute_current_turn(decision=None):
         )
         if assignment and not player.is_human:
             target_name = assignment.split(flip_three_marker, 1)[1].rstrip(".")
-            human_player = next(
-                (candidate for candidate in st.session_state.players if candidate.is_human),
-                None,
+            target = next(
+                candidate
+                for candidate in st.session_state.players
+                if candidate.name == target_name
             )
-            recipient = (
-                "you"
-                if human_player is not None and target_name == human_player.name
-                else target_name
-            )
-            st.session_state.pending_toast = (
-                {
-                    "body": f"{player.name} assigned Flip Three to {recipient}!",
-                    "icon": ":material/style:",
-                }
-            )
+            queue_special_card_notification(player, target, "Flip Three")
 
         freeze_marker = "Drew Freeze and played it on "
         freeze_assignment = next(
@@ -676,18 +676,7 @@ def execute_current_turn(decision=None):
                 for candidate in st.session_state.players
                 if candidate.name == target_name
             )
-            recipient = "you" if target.is_human else target.name
-            effect = (
-                f" {target.current_score()} round points were banked."
-                if target.is_human
-                else ""
-            )
-            st.session_state.pending_toast = (
-                {
-                    "body": f"{player.name} assigned Freeze to {recipient}!{effect}",
-                    "icon": ":material/ac_unit:",
-                }
-            )
+            queue_special_card_notification(player, target, "Freeze")
 
         if player.busted:
             st.session_state.last_decisions[player.name] = "busted"
@@ -720,24 +709,27 @@ def choose_flip_three_target():
 
     actor = st.session_state.players[actor_index]
     st.write(
-        "You drew **Flip Three**. Choose yourself or another active player. "
-        "That player must immediately take up to three cards."
+        "You drew **Flip Three**. Take the three cards yourself, pass them to "
+        "Player 2, or pass them to Player 3. Only active players can receive it."
     )
 
     for target_index, target in enumerate(st.session_state.players):
-        if not target.active:
-            continue
         label = (
-            "TAKE THREE CARDS MYSELF"
+            f"TAKE THREE CARDS MYSELF — PLAYER {target_index + 1} ({target.name.upper()})"
             if target_index == actor_index
-            else f"GIVE FLIP THREE TO {target.name.upper()}"
+            else (
+                f"PASS FLIP THREE TO PLAYER {target_index + 1} "
+                f"({target.name.upper()})"
+            )
         )
         if st.button(
             label,
             key=f"flip_three_target_{target_index}",
+            disabled=not target.active,
             width="stretch",
         ):
             play_flip_three(actor, target, st.session_state.deck)
+            queue_special_card_notification(actor, target, "Flip Three")
             st.session_state.pending_flip_three_actor_index = None
             st.session_state.last_decisions[actor.name] = "hit"
             st.session_state.pending_round_finish = round_is_over(
@@ -759,24 +751,27 @@ def choose_freeze_target():
 
     actor = st.session_state.players[actor_index]
     st.write(
-        "You drew **Freeze**. Choose yourself or another active player. "
-        "That player banks their current points and leaves this round."
+        "You drew **Freeze**. Freeze yourself, pass it to Player 2, or pass it "
+        "to Player 3. Only active players can receive it."
     )
 
     for target_index, target in enumerate(st.session_state.players):
-        if not target.active:
-            continue
         label = (
-            "FREEZE MYSELF"
+            f"FREEZE MYSELF — PLAYER {target_index + 1} ({target.name.upper()})"
             if target_index == actor_index
-            else f"GIVE FREEZE TO {target.name.upper()}"
+            else (
+                f"PASS FREEZE TO PLAYER {target_index + 1} "
+                f"({target.name.upper()})"
+            )
         )
         if st.button(
             label,
             key=f"freeze_target_{target_index}",
+            disabled=not target.active,
             width="stretch",
         ):
             play_freeze(actor, target)
+            queue_special_card_notification(actor, target, "Freeze")
             st.session_state.pending_freeze_actor_index = None
             st.session_state.last_decisions[actor.name] = "hit"
             st.session_state.pending_round_finish = round_is_over(
@@ -1009,12 +1004,12 @@ def show_learning_lab():
                 agent,
                 train_rounds,
                 starting_round=trained_rounds,
-                epsilon_start=0.8 if trained_rounds == 0 else 0.2,
             )
             history.extend(new_history)
             metadata = {
                 "trained_rounds": trained_rounds + train_rounds,
                 "history": history[-100:],
+                "model_version": 2,
             }
             agent.save(MODEL_PATH, metadata)
         st.success(f"Finished {train_rounds:,} new self-play rounds!")
@@ -1036,7 +1031,7 @@ def show_learning_lab():
         ):
             QLearningAgent().save(
                 MODEL_PATH,
-                {"trained_rounds": 0, "history": []},
+                {"trained_rounds": 0, "history": [], "model_version": 2},
             )
             st.session_state.pop("benchmarks", None)
             st.session_state.training_was_reset = True
@@ -1062,8 +1057,9 @@ def show_learning_lab():
         }
         st.line_chart(performance_data)
         st.caption(
-            "The line changes because the opponents are learning too. "
-            "That makes self-play harder than memorising one fixed bot."
+            "The line changes because the opponents are learning too. A higher "
+            "bust rate is not automatically worse: calculated risks can also "
+            "raise Hannah's average points and win rate."
         )
 
     st.subheader("3. Test Hannah against the other characters")
@@ -1090,7 +1086,8 @@ def show_learning_lab():
         example_unique = st.slider("Different number cards", 1, 6, 4)
     with explorer_2:
         example_second_chance = st.checkbox("Has a Second Chance")
-        st.write("The AI only sees fair, public information—never the hidden deck order.")
+        example_risk = st.slider("Estimated duplicate risk", 0, 50, 15, 5) / 100
+        st.write("The AI estimates risk from face-up cards—never the hidden deck order.")
 
     example = Observation(
         round_score=example_score,
@@ -1098,6 +1095,7 @@ def show_learning_lab():
         has_second_chance=example_second_chance,
         total_score=0,
         leader_score=0,
+        bust_risk=example_risk,
     )
     explanation = agent.explain(example)
     choice = explanation["action"].upper()

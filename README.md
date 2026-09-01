@@ -50,15 +50,20 @@ It returns either `"hit"` or `"stay"`. Agents receive only public information:
 - their total game score; and
 - the current leader's score.
 
-The Q-learning policy currently builds its state from the round score, unique
-card count, and Second Chance status. Scores are grouped into five-point
-buckets, giving state keys such as `5|4|1`: score bucket 5, four unique cards,
-and an active Second Chance.
+The Q-learning policy builds its state from the round score, unique card count,
+Second Chance status, and an estimated duplicate-card risk based only on public
+face-up cards. Scores are grouped into five-point buckets and risk into
+five-percentage-point buckets, giving state keys such as `5|4|1|3`: score
+bucket 5, four unique cards, an active Second Chance, and risk bucket 3.
 
 During training, three Q-learning agents play against one another while sharing
 the same evolving Q-table. Their exploration rate decreases over the run.
-Terminal rewards account for round score, busting, flipping seven, and winning
-the round. The agent cannot see the shuffled deck order.
+Every HIT or STAY in a round learns from that round's final outcome. Terminal
+rewards account for round score, flipping seven, and winning the round; a bust
+already scores zero and is not penalized a second time. Update sizes and the
+exploration rate diminish with experience so later training refines established
+choices instead of repeatedly overwriting them. The agent cannot see the
+shuffled deck order.
 
 ## Set up and run
 
@@ -126,9 +131,16 @@ The model file has two top-level objects:
       "stay": 0.0
     }
   },
+  "visit_counts": {
+    "state-key": {
+      "hit": 0,
+      "stay": 0
+    }
+  },
   "metadata": {
     "trained_rounds": 0,
-    "history": []
+    "history": [],
+    "model_version": 2
   }
 }
 ```
@@ -149,4 +161,4 @@ randomly.
   exploration schedule, random seed, checkpoint interval, and output path.
 - Atomic writes and checkpoint files would make long training runs safer.
 - `total_score` and `leader_score` are present in observations but are not yet
-  included in the Q-learning state.
+  included in the Q-learning state; training currently optimizes round play.
