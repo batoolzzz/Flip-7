@@ -1,32 +1,58 @@
+"""
+app.py
+------
+Streamlit entry point.  This file is ONLY an orchestrator:
+  · Initialises session defaults
+  · Decides which screen to show
+  · Delegates rendering to ui/components.py
+  · Delegates state mutations to game_logic/session.py
+
+No HTML strings, no CSS, no game logic lives here.
+"""
+
 import time
-import html
 import sys
+from functools import partial
 from pathlib import Path
 
 import streamlit as st
 
+# ── Path setup ────────────────────────────────────────────────────────────────
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+# ── Domain imports ────────────────────────────────────────────────────────────
 from agents import QLearningAgent, RandomAgent, RuleAgent
-from agents.base_agent import Observation, observe
 from training import evaluate_agent, train_self_play
 from game.personalization import character_profile, hannah_learning_level
+from game import winner_if_game_over
 
-from game import (
-    Player,
-    create_deck,
-    play_freeze,
-    play_flip_three,
-    player_hits,
-    round_is_over,
-    special_card_pass_message,
-    stay,
-    winner_if_game_over,
+# ── Local layer imports ───────────────────────────────────────────────────────
+from ui.components import (
+    inject_styles,
+    render_logo,
+    render_round_banner,
+    render_game_controls,
+    render_setup_screen,
+    render_ai_explanation,
+    show_game_board,
+    show_learning_lab,
 )
+from game_logic.session import (
+    advance_after_result,
+    current_player,
+    execute_current_turn,
+    flush_pending_toast,
+    initialize_game,
+    queue_special_card_notification,
+    reset_everything,
+)
+from game import play_freeze, play_flip_three, round_is_over
 
+# ── Constants ─────────────────────────────────────────────────────────────────
 MODEL_PATH = PROJECT_ROOT / "models" / "q_table.json"
+
 AGENT_OPTIONS = {
     "🎲 Riley (random robot)": "random",
     "📏 Felix (rule-following fox)": "rule",
@@ -36,673 +62,123 @@ AGENT_OPTIONS = {
 THINK_DELAY_SECONDS = 2
 RESULT_DELAY_SECONDS = 2
 
+# ── Page config & global CSS ──────────────────────────────────────────────────
 st.set_page_config(page_title="Flip 7 Demo", layout="wide")
+inject_styles()
 
-st.markdown(
-    """
-<style>
-.stApp {
-    background-color: #FFE66D;
+# ── Session state defaults ────────────────────────────────────────────────────
+_DEFAULTS = {
+    "game_started": False,
+    "last_decisions": {},
+    "turn_phase": "thinking",
+    "pending_round_finish": False,
+    "pending_flip_three_actor_index": None,
+    "pending_freeze_actor_index": None,
 }
+for _key, _value in _DEFAULTS.items():
+    if _key not in st.session_state:
+        st.session_state[_key] = _value
 
-.stApp,
-.stMarkdown,
-.stText,
-p,
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-label,
-[data-testid="stMarkdownContainer"] {
-    color: black !important;
-}
+# ── Flush any queued toast from the previous render cycle ─────────────────────
+flush_pending_toast()
 
-div.stButton > button,
-div.stButton > button *,
-button,
-button * {
-    color: white !important;
-}
+# ── Logo ──────────────────────────────────────────────────────────────────────
+render_logo()
 
-div.stButton > button {
-    background-color: black;
-    color: white;
-    border: 2px solid black;
-    border-radius: 10px;
-    padding: 0.6rem 1rem;
-    font-weight: 700;
-}
+# ── Sidebar navigation ────────────────────────────────────────────────────────
+area = st.sidebar.radio("Choose an area", ["🎲 Play", "🧠 Learning Lab"])
 
-div.stButton > button:hover {
-    background-color: #333333;
-    color: white;
-    border: 2px solid #333333;
-}
+if area == "🧠 Learning Lab":
+    agent, metadata = QLearningAgent.load(MODEL_PATH)
+    show_learning_lab(
+        agent=agent,
+        metadata=metadata,
+        model_path=MODEL_PATH,
+        train_fn=train_self_play,
+        evaluate_fn=evaluate_agent,
+        random_agent_cls=RandomAgent,
+        rule_agent_cls=RuleAgent,
+        ql_agent_cls=QLearningAgent,
+        observe_fn=None,           # used internally by components.py
+        character_profile_fn=character_profile,
+        hannah_learning_level_fn=hannah_learning_level,
+    )
+    st.stop()
 
-[class*="st-key-player_1_hit"] div.stButton > button,
-[class*="st-key-player_1_stay"] div.stButton > button {
-    background-color: #FFF6BF !important;
-    color: black !important;
-    border: 3px solid black !important;
-    border-radius: 10px !important;
-    padding: 8px 22px !important;
-    min-height: 47px;
-    font-weight: 900 !important;
-}
+# ── Play area ─────────────────────────────────────────────────────────────────
+if not st.session_state.game_started:
+    render_setup_screen(
+        agent_options=AGENT_OPTIONS,
+        initialize_game_fn=partial(
+            initialize_game,
+            agent_options=AGENT_OPTIONS,
+            model_path=MODEL_PATH,
+            character_profile_fn=character_profile,
+        ),
+    )
+    st.stop()
 
-[class*="st-key-player_1_hit"] div.stButton > button *,
-[class*="st-key-player_1_stay"] div.stButton > button * {
-    color: black !important;
-}
+# ── Active game ───────────────────────────────────────────────────────────────
+winner = winner_if_game_over(st.session_state.players)
 
-[class*="st-key-player_1_hit"] div.stButton > button:hover,
-[class*="st-key-player_1_stay"] div.stButton > button:hover {
-    background-color: #FFF0A3 !important;
-    color: black !important;
-    border: 3px solid black !important;
-}
+center_left, center, center_right = st.columns([1, 2, 1])
+with center:
+    render_round_banner(st.session_state.round_number)
+    render_game_controls(reset_fn=reset_everything)
 
-[class*="st-key-player_1_stay"] div.stButton > button:disabled {
-    background-color: #FFF6BF !important;
-    color: black !important;
-    border: 3px solid black !important;
-    opacity: 0.55;
-}
+if st.session_state.game_over and winner:
+    st.success(f"{winner.name} wins the game with {winner.total_score} points!")
 
-.main-status {
-    background-color: white;
-    border: 4px solid black;
-    border-radius: 16px;
-    padding: 16px;
-    text-align: center;
-    font-weight: 900;
-    margin-bottom: 12px;
-    color: black !important;
-}
-
-.round-count {
-    color: #CC0000 !important;
-    font-size: 30px;
-    font-weight: 1000;
-    margin-bottom: 12px;
-}
-
-.human-controls-area {
-    min-height: 95px;
-    margin-bottom: 8px;
-    text-align: center;
-}
-
-.human-controls-title {
-    font-size: 22px;
-    font-weight: 900;
-    color: black !important;
-    margin-bottom: 8px;
-}
-
-.human-controls-placeholder {
-    min-height: 95px;
-}
-
-.game-board {
-    width: 100%;
-    margin-top: 8px;
-}
-
-.top-player-row {
-    display: flex;
-    justify-content: center;
-    width: 100%;
-}
-
-.bottom-player-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 28px;
-    margin-top: 14px;
-    width: 100%;
-}
-
-.player-panel {
-    width: 100%;
-}
-
-.top-player-row .player-panel {
-    max-width: 620px;
-}
-
-.player-title {
-    text-align: center;
-    font-size: 26px;
-    font-weight: 900;
-    margin-top: 10px;
-    margin-bottom: 6px;
-    color: black !important;
-}
-
-.status-box {
-    background-color: white;
-    border: 3px solid black;
-    border-radius: 12px;
-    padding: 14px;
-    text-align: center;
-    font-weight: 700;
-    margin-bottom: 18px;
-    color: black !important;
-    min-height: 185px;
-}
-
-.status-box * {
-    color: black !important;
-}
-
-.current-player-title {
-    color: #008000 !important;
-    text-shadow: 0 0 1px #008000;
-}
-
-.current-player-box {
-    border: 5px solid #008000 !important;
-    box-shadow: 0 0 15px rgba(0, 128, 0, 0.6);
-}
-
-.turn-label-wrapper {
-    text-align: center;
-    min-height: 38px;
-}
-
-.current-turn-label {
-    background-color: #008000;
-    color: white !important;
-    border-radius: 999px;
-    padding: 6px 14px;
-    font-weight: 900;
-    display: inline-block;
-    margin-bottom: 8px;
-}
-
-.player-stats {
-    text-align: center;
-    color: #2D2755 !important;
-    font-size: 16px;
-    font-weight: 750;
-    line-height: 1.75;
-}
-
-.player-stats strong {
-    color: #21183F !important;
-}
-
-.turn-label-hidden {
-    background-color: transparent;
-    color: transparent !important;
-    border-radius: 999px;
-    padding: 6px 14px;
-    font-weight: 900;
-    display: inline-block;
-    margin-bottom: 8px;
-    visibility: hidden;
-}
-
-.decision-top-row {
-    display: flex;
-    justify-content: center;
-    gap: 12px;
-    margin-top: 14px;
-    flex-wrap: wrap;
-}
-
-.busted-row {
-    display: flex;
-    justify-content: center;
-    margin-top: 12px;
-}
-
-.decision-box {
-    background-color: #FFF6BF;
-    border: 3px solid black;
-    border-radius: 10px;
-    padding: 8px 22px;
-    font-weight: 900;
-    min-width: 90px;
-    text-align: center;
-    color: black !important;
-}
-
-.busted-box {
-    background-color: #FFF6BF;
-    border: 3px solid black;
-    border-radius: 10px;
-    padding: 9px 28px;
-    font-weight: 900;
-    min-width: 240px;
-    text-align: center;
-    color: black !important;
-}
-
-.hit-selected {
-    border: 5px solid #008000 !important;
-    box-shadow: 0 0 10px rgba(0, 128, 0, 0.7);
-}
-
-.stay-selected {
-    border: 5px solid #CC0000 !important;
-    box-shadow: 0 0 10px rgba(204, 0, 0, 0.7);
-}
-
-.busted-selected {
-    border: 5px solid #CC0000 !important;
-    box-shadow: 0 0 10px rgba(204, 0, 0, 0.7);
-}
-
-/* Sunny yellow board-game theme */
-.stApp {
-    background:
-        radial-gradient(circle at 12% 18%, rgba(255,255,255,.45) 0 5px, transparent 6px),
-        radial-gradient(circle at 88% 32%, rgba(255,255,255,.35) 0 7px, transparent 8px),
-        linear-gradient(145deg, #FFF6B0 0%, #FFE066 48%, #F7C934 100%);
-    background-size: 90px 90px, 130px 130px, auto;
-    min-height: 100vh;
-}
-
-[data-testid="stSidebar"] label,
-[data-testid="stSidebar"] p,
-[data-testid="stSidebar"] span,
-[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
-    color: #3B2F0B !important;
-}
-
-.block-container {
-    max-width: 1180px;
-    padding-top: 1.5rem;
-    padding-bottom: 3rem;
-}
-
-.game-logo {
-    color: #3B2F0B !important;
-    font-family: "Trebuchet MS", Arial, sans-serif;
-    font-size: clamp(42px, 7vw, 72px);
-    line-height: 1;
-    text-align: center;
-    font-weight: 1000;
-    letter-spacing: -3px;
-    text-shadow: 0 5px 0 #FFF4B8, 0 9px 18px rgba(105, 75, 0, .22);
-    margin: 4px 0 8px;
-}
-
-.game-logo-seven {
-    color: #A64B00 !important;
-}
-
-.game-subtitle {
-    color: #59440A !important;
-    text-align: center;
-    font-size: 17px;
-    font-weight: 800;
-    margin-bottom: 18px;
-}
-
-.main-status {
-    background: #FFF8D6;
-    border: 4px solid #8B6F00;
-    border-radius: 24px;
-    padding: 12px 20px;
-    margin: 0 0 10px;
-    box-shadow: 0 7px 0 #8B6F00, 0 12px 22px rgba(105, 75, 0, .2);
-}
-
-.round-count {
-    color: #5C4300 !important;
-    font-family: "Trebuchet MS", Arial, sans-serif;
-    font-size: 28px;
-    letter-spacing: 2px;
-    margin: 0;
-}
-
-div.stButton > button {
-    background: #A64B00 !important;
-    color: white !important;
-    border: 3px solid #5C2A00 !important;
-    border-radius: 14px !important;
-    min-height: 48px;
-    font-family: "Trebuchet MS", Arial, sans-serif;
-    font-weight: 900 !important;
-    box-shadow: 0 5px 0 #5C2A00;
-    transition: transform .12s ease, box-shadow .12s ease, background .12s ease !important;
-}
-
-div.stButton > button:hover {
-    background: #C45A00 !important;
-    color: white !important;
-    border-color: #5C2A00 !important;
-    transform: translateY(-2px);
-    box-shadow: 0 7px 0 #5C2A00;
-}
-
-div.stButton > button:active {
-    transform: translateY(3px);
-    box-shadow: 0 2px 0 #5C2A00;
-}
-
-[data-testid="stVerticalBlockBorderWrapper"] {
-    background: rgba(255, 252, 229, .96);
-    border: 4px solid #8B6F00 !important;
-    border-radius: 22px !important;
-    box-shadow: 0 8px 0 #8B6F00, 0 14px 25px rgba(105, 75, 0, .18);
-    padding: 6px;
-}
-
-[class*="st-key-player_card_"] {
-    background: #FFF1A8 !important;
-    border: 4px solid #8B6F00 !important;
-    border-radius: 22px !important;
-    box-shadow: 0 8px 0 #8B6F00, 0 14px 25px rgba(105, 75, 0, .18) !important;
-}
-
-[class*="st-key-player_card_"] [data-testid="stVerticalBlockBorderWrapper"],
-[class*="st-key-player_card_"] [data-testid="stVerticalBlock"] {
-    background: #FFF1A8 !important;
-    border-radius: 18px !important;
-}
-
-.player-title {
-    color: #3B2F0B !important;
-    font-family: "Trebuchet MS", Arial, sans-serif;
-    font-size: 25px;
-    letter-spacing: .5px;
-    text-shadow: 0 3px 0 #FFF4B8;
-    margin-top: 14px;
-}
-
-.current-player-title {
-    color: #8A3E00 !important;
-    text-shadow: 0 3px 0 #FFF4B8, 0 0 14px rgba(255, 255, 255, .75);
-}
-
-.current-turn-label {
-    background: #20BF6B;
-    border: 3px solid white;
-    box-shadow: 0 4px 0 #167D49;
-    padding: 7px 16px;
-    letter-spacing: 1px;
-}
-
-.decision-box,
-.busted-box {
-    background: #FFF8D6;
-    border: 3px solid #8B6F00;
-    color: #3B2F0B !important;
-    border-radius: 13px;
-}
-
-.hit-selected {
-    background: #B8F2D0 !important;
-    border-color: #16854B !important;
-    box-shadow: 0 4px 0 #16854B;
-}
-
-.stay-selected {
-    background: #FFE69A !important;
-    border-color: #D88400 !important;
-    box-shadow: 0 4px 0 #D88400;
-}
-
-.busted-selected {
-    background: #FFD1D1 !important;
-    border-color: #D63031 !important;
-    box-shadow: 0 4px 0 #D63031;
-}
-
-[class*="st-key-player_1_hit"] div.stButton > button,
-[class*="st-key-player_1_stay"] div.stButton > button {
-    background: #FFF8D6 !important;
-    color: #3B2F0B !important;
-    border: 3px solid #8B6F00 !important;
-    box-shadow: 0 4px 0 #8B6F00;
-}
-
-[class*="st-key-player_1_hit"] div.stButton > button *,
-[class*="st-key-player_1_stay"] div.stButton > button * {
-    color: #3B2F0B !important;
-}
-
-[class*="st-key-player_1_hit"] div.stButton > button:hover,
-[class*="st-key-player_1_stay"] div.stButton > button:hover {
-    background: #FFE88A !important;
-    border-color: #8B6F00 !important;
-}
-
-@media (max-width: 700px) {
-    .block-container { padding-left: 1rem; padding-right: 1rem; }
-    .game-logo { letter-spacing: -1px; }
-    .busted-box { min-width: 170px; }
-    .player-title { font-size: 21px; }
-}
-</style>
-""",
-    unsafe_allow_html=True,
+show_game_board(
+    execute_turn_fn=execute_current_turn,
+    character_profile_fn=character_profile,
 )
 
+# ── Special-card dialogs (human only) ─────────────────────────────────────────
+if (
+    st.session_state.turn_phase == "choosing_freeze"
+    and st.session_state.pending_freeze_actor_index is not None
+):
+    _choose_freeze_target()
 
-def make_agent(agent_type):
-    if agent_type == "random":
-        return RandomAgent()
-    if agent_type == "q_learning":
-        agent, _ = QLearningAgent.load(MODEL_PATH)
-        return agent
-    return RuleAgent()
+if (
+    st.session_state.turn_phase == "choosing_flip_three"
+    and st.session_state.pending_flip_three_actor_index is not None
+):
+    _choose_flip_three_target()
 
+render_ai_explanation()
 
-def queue_special_card_notification(actor, target, card_name):
-    icon = ":material/ac_unit:" if card_name == "Freeze" else ":material/style:"
-    st.session_state.pending_toast = {
-        "body": special_card_pass_message(actor, target, card_name),
-        "icon": icon,
-    }
+# ── Auto-advance loop ─────────────────────────────────────────────────────────
+_current = current_player()
 
+should_auto_think = (
+    not st.session_state.paused
+    and not st.session_state.game_over
+    and st.session_state.turn_phase == "thinking"
+    and not (st.session_state.mode == "human" and _current.is_human)
+)
 
-def initialize_game(mode):
-    st.session_state.game_started = True
-    st.session_state.mode = mode
-    st.session_state.paused = False
-    st.session_state.game_over = False
-    st.session_state.round_number = 1
-    st.session_state.current_player_index = 0
-    st.session_state.turn_phase = "thinking"
-    st.session_state.pending_round_finish = False
-    st.session_state.pending_flip_three_actor_index = None
-    st.session_state.pending_freeze_actor_index = None
-    st.session_state.deck = create_deck()
+should_auto_advance_result = (
+    not st.session_state.paused
+    and not st.session_state.game_over
+    and st.session_state.turn_phase == "result"
+)
 
-    selected_types = [
-        AGENT_OPTIONS[st.session_state.get("player_1_agent_choice", "📏 Felix (rule-following fox)")],
-        AGENT_OPTIONS[st.session_state.get("player_2_agent_choice", "📏 Felix (rule-following fox)")],
-        AGENT_OPTIONS[st.session_state.get("player_3_agent_choice", "🧠 Hannah (learning AI)")],
-    ]
-    used_names = {}
-    players = []
-    for index, agent_type in enumerate(selected_types):
-        is_human = mode == "human" and index == 0
-        profile = character_profile(agent_type, is_human=is_human)
-        base_name = profile["name"]
-        used_names[base_name] = used_names.get(base_name, 0) + 1
-        suffix = f" {used_names[base_name]}" if used_names[base_name] > 1 else ""
-        players.append(Player(f"{base_name}{suffix}", is_human=is_human))
-    st.session_state.players = players
-    st.session_state.player_agents = [
-        None if mode == "human" and index == 0 else make_agent(agent_type)
-        for index, agent_type in enumerate(selected_types)
-    ]
-    st.session_state.agent_types = selected_types
-    st.session_state.last_ai_explanation = None
+if should_auto_think:
+    time.sleep(THINK_DELAY_SECONDS)
+    execute_current_turn()
+    st.rerun()
 
-    st.session_state.last_decisions = {
-        player.name: None for player in st.session_state.players
-    }
-
-
-def reset_everything():
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-
+if should_auto_advance_result:
+    time.sleep(RESULT_DELAY_SECONDS)
+    advance_after_result()
     st.rerun()
 
 
-def current_player():
-    return st.session_state.players[st.session_state.current_player_index]
-
-
-def reset_last_decisions():
-    for player in st.session_state.players:
-        st.session_state.last_decisions[player.name] = None
-
-
-def move_to_next_active_player():
-    players = st.session_state.players
-
-    if round_is_over(players):
-        return
-
-    for _ in range(len(players)):
-        st.session_state.current_player_index = (
-            st.session_state.current_player_index + 1
-        ) % len(players)
-
-        if players[st.session_state.current_player_index].active:
-            return
-
-
-def finalize_round():
-    players = st.session_state.players
-
-    for player in players:
-        points = player.current_score()
-        player.total_score += points
-
-    winner = winner_if_game_over(players)
-
-    if winner:
-        st.session_state.game_over = True
-        st.session_state.paused = True
-        return
-
-    st.session_state.round_number += 1
-    st.session_state.deck = create_deck()
-
-    for player in players:
-        player.reset_round()
-
-    reset_last_decisions()
-
-    st.session_state.current_player_index = 0
-    st.session_state.turn_phase = "thinking"
-    st.session_state.pending_round_finish = False
-
-
-def execute_current_turn(decision=None):
-    if st.session_state.paused or st.session_state.game_over:
-        return
-
-    player = current_player()
-
-    if not player.active:
-        move_to_next_active_player()
-        return
-
-    if decision is None:
-        agent = st.session_state.player_agents[st.session_state.current_player_index]
-        observation = observe(player, st.session_state.players)
-        decision = agent.choose_action(observation, player.has_any_card())
-        if isinstance(agent, QLearningAgent):
-            st.session_state.last_ai_explanation = {
-                "player": player.name,
-                **agent.explain(observation, player.has_any_card()),
-            }
-
-    if decision == "stay" and player.has_any_card():
-        stay(player)
-        st.session_state.last_decisions[player.name] = "stay"
-    else:
-        hit_log = player_hits(
-            player,
-            st.session_state.players,
-            st.session_state.deck,
-            defer_flip_three=player.is_human,
-            defer_freeze=player.is_human,
-        )
-
-        if player.pending_freeze:
-            st.session_state.pending_freeze_actor_index = (
-                st.session_state.current_player_index
-            )
-            st.session_state.last_decisions[player.name] = "hit"
-            st.session_state.turn_phase = "choosing_freeze"
-            return
-
-        if player.pending_flip_three:
-            st.session_state.pending_flip_three_actor_index = (
-                st.session_state.current_player_index
-            )
-            st.session_state.last_decisions[player.name] = "hit"
-            st.session_state.turn_phase = "choosing_flip_three"
-            return
-
-        flip_three_marker = "Drew Flip Three and played it on "
-        assignment = next(
-            (entry for entry in hit_log if flip_three_marker in entry),
-            None,
-        )
-        if assignment and not player.is_human:
-            target_name = assignment.split(flip_three_marker, 1)[1].rstrip(".")
-            target = next(
-                candidate
-                for candidate in st.session_state.players
-                if candidate.name == target_name
-            )
-            queue_special_card_notification(player, target, "Flip Three")
-
-        freeze_marker = "Drew Freeze and played it on "
-        freeze_assignment = next(
-            (entry for entry in hit_log if freeze_marker in entry),
-            None,
-        )
-        if freeze_assignment and not player.is_human:
-            target_name = freeze_assignment.split(freeze_marker, 1)[1].rstrip(".")
-            target = next(
-                candidate
-                for candidate in st.session_state.players
-                if candidate.name == target_name
-            )
-            queue_special_card_notification(player, target, "Freeze")
-
-        if player.busted:
-            st.session_state.last_decisions[player.name] = "busted"
-        else:
-            st.session_state.last_decisions[player.name] = "hit"
-
-    st.session_state.pending_round_finish = round_is_over(st.session_state.players)
-    st.session_state.turn_phase = "result"
-
-
-def advance_after_result():
-    if st.session_state.pending_round_finish:
-        finalize_round()
-        return
-
-    reset_last_decisions()
-    move_to_next_active_player()
-    st.session_state.turn_phase = "thinking"
-
-
-@st.dialog(
-    "Choose who gets Flip Three",
-    dismissible=False,
-    icon=":material/style:",
-)
-def choose_flip_three_target():
+# ── Special-card dialog helpers (defined after imports are settled) ────────────
+@st.dialog("Choose who gets Flip Three", dismissible=False, icon=":material/style:")
+def _choose_flip_three_target():
     actor_index = st.session_state.get("pending_flip_three_actor_index")
     if actor_index is None:
         st.rerun()
@@ -712,39 +188,25 @@ def choose_flip_three_target():
         "You drew **Flip Three**. Take the three cards yourself, pass them to "
         "Player 2, or pass them to Player 3. Only active players can receive it."
     )
-
     for target_index, target in enumerate(st.session_state.players):
         label = (
             f"TAKE THREE CARDS MYSELF — PLAYER {target_index + 1} ({target.name.upper()})"
             if target_index == actor_index
-            else (
-                f"PASS FLIP THREE TO PLAYER {target_index + 1} "
-                f"({target.name.upper()})"
-            )
+            else f"PASS FLIP THREE TO PLAYER {target_index + 1} ({target.name.upper()})"
         )
-        if st.button(
-            label,
-            key=f"flip_three_target_{target_index}",
-            disabled=not target.active,
-            width="stretch",
-        ):
+        if st.button(label, key=f"flip_three_target_{target_index}",
+                     disabled=not target.active, width="stretch"):
             play_flip_three(actor, target, st.session_state.deck)
             queue_special_card_notification(actor, target, "Flip Three")
             st.session_state.pending_flip_three_actor_index = None
             st.session_state.last_decisions[actor.name] = "hit"
-            st.session_state.pending_round_finish = round_is_over(
-                st.session_state.players
-            )
+            st.session_state.pending_round_finish = round_is_over(st.session_state.players)
             st.session_state.turn_phase = "result"
             st.rerun()
 
 
-@st.dialog(
-    "Choose who gets Freeze",
-    dismissible=False,
-    icon=":material/ac_unit:",
-)
-def choose_freeze_target():
+@st.dialog("Choose who gets Freeze", dismissible=False, icon=":material/ac_unit:")
+def _choose_freeze_target():
     actor_index = st.session_state.get("pending_freeze_actor_index")
     if actor_index is None:
         st.rerun()
@@ -754,529 +216,18 @@ def choose_freeze_target():
         "You drew **Freeze**. Freeze yourself, pass it to Player 2, or pass it "
         "to Player 3. Only active players can receive it."
     )
-
     for target_index, target in enumerate(st.session_state.players):
         label = (
             f"FREEZE MYSELF — PLAYER {target_index + 1} ({target.name.upper()})"
             if target_index == actor_index
-            else (
-                f"PASS FREEZE TO PLAYER {target_index + 1} "
-                f"({target.name.upper()})"
-            )
+            else f"PASS FREEZE TO PLAYER {target_index + 1} ({target.name.upper()})"
         )
-        if st.button(
-            label,
-            key=f"freeze_target_{target_index}",
-            disabled=not target.active,
-            width="stretch",
-        ):
+        if st.button(label, key=f"freeze_target_{target_index}",
+                     disabled=not target.active, width="stretch"):
             play_freeze(actor, target)
             queue_special_card_notification(actor, target, "Freeze")
             st.session_state.pending_freeze_actor_index = None
             st.session_state.last_decisions[actor.name] = "hit"
-            st.session_state.pending_round_finish = round_is_over(
-                st.session_state.players
-            )
+            st.session_state.pending_round_finish = round_is_over(st.session_state.players)
             st.session_state.turn_phase = "result"
             st.rerun()
-
-
-def get_cards_text(player):
-    cards = player.visible_cards()
-
-    if not cards:
-        return "None"
-
-    return ", ".join(cards)
-
-
-def build_player_panel_html(player):
-    current = current_player()
-
-    is_current_player = (
-        player.name == current.name
-        and not st.session_state.game_over
-        and (
-            player.active
-            or st.session_state.turn_phase == "result"
-        )
-    )
-
-    show_decision_result = (
-        is_current_player
-        and st.session_state.turn_phase == "result"
-    )
-
-    title_class = "player-title current-player-title" if is_current_player else "player-title"
-    box_class = "status-box current-player-box" if is_current_player else "status-box"
-    turn_label_class = "current-turn-label" if is_current_player else "turn-label-hidden"
-
-    last_decision = st.session_state.last_decisions.get(player.name)
-
-    hit_box_class = (
-        "decision-box hit-selected"
-        if show_decision_result and last_decision == "hit"
-        else "decision-box"
-    )
-
-    stay_box_class = (
-        "decision-box stay-selected"
-        if show_decision_result and last_decision == "stay"
-        else "decision-box"
-    )
-
-    busted_box_class = (
-        "busted-box busted-selected"
-        if player.busted
-        else "busted-box"
-    )
-
-    safe_player_name = html.escape(player.name.upper())
-    safe_cards_text = html.escape(get_cards_text(player))
-
-    return (
-        f'<div class="player-panel">'
-        f'<div class="turn-label-wrapper">'
-        f'<span class="{turn_label_class}">CURRENT TURN</span>'
-        f'</div>'
-        f'<div class="{title_class}">{safe_player_name}</div>'
-        f'<div class="{box_class}">'
-        f'Total score: {player.total_score}<br>'
-        f'Current round score: {player.current_score()}<br>'
-        f'Cards: {safe_cards_text}<br>'
-        f'<div class="decision-top-row">'
-        f'<div class="{hit_box_class}">HIT</div>'
-        f'<div class="{stay_box_class}">STAY</div>'
-        f'</div>'
-        f'<div class="busted-row">'
-        f'<div class="{busted_box_class}">BUSTED</div>'
-        f'</div>'
-        f'</div>'
-        f'</div>'
-    )
-
-
-def show_game_board():
-    def show_player_panel(player):
-        current = current_player()
-        is_current = (
-            player.name == current.name
-            and not st.session_state.game_over
-            and (player.active or st.session_state.turn_phase == "result")
-        )
-        is_human_turn = (
-            st.session_state.mode == "human"
-            and player.is_human
-            and is_current
-            and player.active
-            and not st.session_state.paused
-            and st.session_state.turn_phase == "thinking"
-        )
-
-        if is_current:
-            st.markdown(
-                '<div class="turn-label-wrapper"><span class="current-turn-label">CURRENT TURN</span></div>',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown(
-                '<div class="turn-label-wrapper"><span class="turn-label-hidden">CURRENT TURN</span></div>',
-                unsafe_allow_html=True,
-            )
-
-        player_index = st.session_state.players.index(player)
-        agent_type = st.session_state.agent_types[player_index]
-        profile = character_profile(agent_type, is_human=player.is_human)
-        title_class = "player-title current-player-title" if is_current else "player-title"
-        st.markdown(
-            f'<div class="{title_class}">{html.escape(player.name.upper())}</div>',
-            unsafe_allow_html=True,
-        )
-
-        with st.container(border=True, key=f"player_card_{player_index}"):
-            with st.container(horizontal_alignment="center", gap=None):
-                st.image(str(profile["avatar"]), width=132)
-                st.caption(profile["subtitle"], text_alignment="center")
-            st.markdown(
-                f'<div class="player-stats">'
-                f'⭐ Total score: <strong>{player.total_score}</strong><br>'
-                f'🎯 This round: <strong>{player.current_score()}</strong><br>'
-                f'🃏 Cards: <strong>{html.escape(get_cards_text(player))}</strong>'
-                f'</div>',
-                unsafe_allow_html=True,
-            )
-
-            if is_human_turn:
-                hit_col, stay_col = st.columns(2)
-                with hit_col:
-                    if st.button("HIT", key="player_1_hit", width="stretch"):
-                        execute_current_turn("hit")
-                        st.rerun()
-                with stay_col:
-                    if st.button(
-                        "STAY",
-                        key="player_1_stay",
-                        disabled=not player.has_any_card(),
-                        width="stretch",
-                    ):
-                        execute_current_turn("stay")
-                        st.rerun()
-            else:
-                last_decision = st.session_state.last_decisions.get(player.name)
-                hit_class = "decision-box hit-selected" if is_current and last_decision == "hit" else "decision-box"
-                stay_class = "decision-box stay-selected" if is_current and last_decision == "stay" else "decision-box"
-                st.markdown(
-                    f'<div class="decision-top-row">'
-                    f'<div class="{hit_class}">HIT</div>'
-                    f'<div class="{stay_class}">STAY</div>'
-                    f'</div>',
-                    unsafe_allow_html=True,
-                )
-
-            if player.busted:
-                st.markdown(
-                    '<div class="busted-row"><div class="busted-box busted-selected">💥 BUSTED</div></div>',
-                    unsafe_allow_html=True,
-                )
-
-    top_left, top_center, top_right = st.columns([1, 2, 1])
-    with top_center:
-        show_player_panel(st.session_state.players[0])
-
-    bottom_left, bottom_right = st.columns(2)
-    with bottom_left:
-        show_player_panel(st.session_state.players[2])
-    with bottom_right:
-        show_player_panel(st.session_state.players[1])
-
-
-def show_learning_lab():
-    agent, metadata = QLearningAgent.load(MODEL_PATH)
-    trained_rounds = int(metadata.get("trained_rounds", 0))
-    history = list(metadata.get("history", []))
-
-    st.markdown(
-        '<div class="main-status"><div class="round-count">HANNAH\'S LEARNING LAB</div></div>',
-        unsafe_allow_html=True,
-    )
-    st.info(
-        "Hannah learns by playing practice games against copies of herself. "
-        "Riley and Felix are only used afterward to test what she learned."
-    )
-    if st.session_state.pop("training_was_reset", False):
-        st.success("Hannah's training was reset. She is starting fresh.")
-
-    learning = hannah_learning_level(trained_rounds)
-    intro_portrait, intro_progress = st.columns([1, 3], vertical_alignment="center")
-    with intro_portrait:
-        st.image(str(character_profile("q_learning")["avatar"]), width=160)
-    with intro_progress:
-        st.subheader(f"Level {learning['level']}: {learning['title']}")
-        if learning["next_rounds"] is None:
-            progress_text = "Top practice level reached — Hannah can still keep learning!"
-        else:
-            progress_text = f"{learning['rounds_to_next']:,} more rounds to reach the next level"
-        st.progress(learning["progress"], text=progress_text)
-        st.caption("Levels count real self-play practice rounds saved in Hannah's learning file.")
-
-    metric_1, metric_2, metric_3 = st.columns(3)
-    metric_1.metric("Practice rounds", f"{trained_rounds:,}")
-    metric_2.metric("Situations learned", f"{len(agent.q_table):,}")
-    metric_3.metric("Exploration now", "0% in real games")
-
-    st.subheader("1. Help Hannah practise")
-    st.write(
-        "At first Hannah explores lots of HIT and STAY choices. As she practises, "
-        "she explores less and uses the choices that earned better rewards."
-    )
-    quick_col, deep_col = st.columns(2)
-    train_rounds = None
-    with quick_col:
-        if st.button("⚡ PRACTISE 500 ROUNDS", width="stretch"):
-            train_rounds = 500
-    with deep_col:
-        if st.button("🚀 PRACTISE 5,000 ROUNDS", width="stretch"):
-            train_rounds = 5000
-
-    if train_rounds:
-        with st.spinner("Three copies of Hannah are practising together..."):
-            new_history = train_self_play(
-                agent,
-                train_rounds,
-                starting_round=trained_rounds,
-            )
-            history.extend(new_history)
-            metadata = {
-                "trained_rounds": trained_rounds + train_rounds,
-                "history": history[-100:],
-                "model_version": 2,
-            }
-            agent.save(MODEL_PATH, metadata)
-        st.success(f"Finished {train_rounds:,} new self-play rounds!")
-        st.rerun()
-
-    with st.expander("Reset AI training"):
-        st.warning(
-            "This permanently clears Hannah's learned choices, practice "
-            "round count, learning graph, and saved benchmark results."
-        )
-        reset_confirmed = st.checkbox(
-            "I understand and want Hannah to start from scratch.",
-            key="confirm_training_reset",
-        )
-        if st.button(
-            "🗑️ RESET AI TRAINING",
-            disabled=not reset_confirmed,
-            width="stretch",
-        ):
-            QLearningAgent().save(
-                MODEL_PATH,
-                {"trained_rounds": 0, "history": [], "model_version": 2},
-            )
-            st.session_state.pop("benchmarks", None)
-            st.session_state.training_was_reset = True
-            st.rerun()
-
-    if history:
-        st.subheader("2. Watch Hannah get smarter")
-        st.area_chart(
-            history,
-            x="round",
-            y="states_learned",
-            x_label="Practice round",
-            y_label="Situations learned",
-            color="#6C5CE7",
-        )
-        st.caption(
-            "Each new situation is another card pattern Hannah has practised. "
-            "Her growing memory is saved and used in future games."
-        )
-        performance_data = {
-            "Hannah's average points": [point["average_score"] for point in history],
-            "Hannah's bust rate × 100": [point["bust_rate"] * 100 for point in history],
-        }
-        st.line_chart(performance_data)
-        st.caption(
-            "The line changes because the opponents are learning too. A higher "
-            "bust rate is not automatically worse: calculated risks can also "
-            "raise Hannah's average points and win rate."
-        )
-
-    st.subheader("3. Test Hannah against the other characters")
-    if st.button("🏁 RUN A 300-ROUND BOT CHALLENGE", width="stretch"):
-        with st.spinner("Running fair tests without changing what the AI learned..."):
-            st.session_state.benchmarks = {
-                "Riley": evaluate_agent(agent, RandomAgent),
-                "Felix": evaluate_agent(agent, RuleAgent),
-            }
-
-    benchmarks = st.session_state.get("benchmarks")
-    if benchmarks:
-        columns = st.columns(2)
-        for column, (name, result) in zip(columns, benchmarks.items()):
-            with column:
-                st.metric(f"Win rate vs {name}", f"{result['win_rate']:.0%}")
-                st.write(f"Average points: **{result['average_score']:.1f}**")
-                st.write(f"Bust rate: **{result['bust_rate']:.0%}**")
-
-    st.subheader("4. Ask what the AI would do")
-    explorer_1, explorer_2 = st.columns(2)
-    with explorer_1:
-        example_score = st.slider("Points this round", 0, 70, 25, 5)
-        example_unique = st.slider("Different number cards", 1, 6, 4)
-    with explorer_2:
-        example_second_chance = st.checkbox("Has a Second Chance")
-        example_risk = st.slider("Estimated duplicate risk", 0, 50, 15, 5) / 100
-        st.write("The AI estimates risk from face-up cards—never the hidden deck order.")
-
-    example = Observation(
-        round_score=example_score,
-        unique_cards=example_unique,
-        has_second_chance=example_second_chance,
-        total_score=0,
-        leader_score=0,
-        bust_risk=example_risk,
-    )
-    explanation = agent.explain(example)
-    choice = explanation["action"].upper()
-    st.success(
-        f"Hannah chooses **{choice}**. "
-        f"Learned value — HIT: {explanation['hit_value']:.1f}, "
-        f"STAY: {explanation['stay_value']:.1f}."
-    )
-    if explanation["hit_value"] == explanation["stay_value"] == 0:
-        st.warning(
-            "This exact kind of situation has not been learned yet. "
-            "Give Hannah more practice and try again!"
-        )
-
-
-if "game_started" not in st.session_state:
-    st.session_state.game_started = False
-
-if "last_decisions" not in st.session_state:
-    st.session_state.last_decisions = {}
-
-if "turn_phase" not in st.session_state:
-    st.session_state.turn_phase = "thinking"
-
-if "pending_round_finish" not in st.session_state:
-    st.session_state.pending_round_finish = False
-
-if "pending_flip_three_actor_index" not in st.session_state:
-    st.session_state.pending_flip_three_actor_index = None
-
-if "pending_freeze_actor_index" not in st.session_state:
-    st.session_state.pending_freeze_actor_index = None
-
-pending_toast = st.session_state.pop("pending_toast", None)
-if pending_toast:
-    if isinstance(pending_toast, str):
-        pending_toast = {"body": pending_toast, "icon": ":material/style:"}
-    st.toast(
-        pending_toast["body"],
-        icon=pending_toast["icon"],
-        duration="short",
-    )
-
-
-st.markdown(
-    '<div class="game-logo">FLIP <span class="game-logo-seven">7</span></div>'
-    '<div class="game-subtitle">Draw cards, dodge duplicates, and race to 200 points!</div>',
-    unsafe_allow_html=True,
-)
-
-area = st.sidebar.radio("Choose an area", ["🎲 Play", "🧠 Learning Lab"])
-if area == "🧠 Learning Lab":
-    show_learning_lab()
-    st.stop()
-
-if not st.session_state.game_started:
-    st.markdown(
-        '<div class="main-status"><div class="round-count">CHOOSE YOUR GAME</div></div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        '<div class="game-subtitle">Take the first seat or sit back and watch the bots battle.</div>',
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("### Choose each bot's brain")
-    brain_col_1, brain_col_2, brain_col_3 = st.columns(3)
-    choices = list(AGENT_OPTIONS)
-    with brain_col_1:
-        st.selectbox(
-            "Player 1 (watch mode)",
-            choices,
-            index=1,
-            key="player_1_agent_choice",
-        )
-    with brain_col_2:
-        st.selectbox(
-            "Player 2",
-            choices,
-            index=1,
-            key="player_2_agent_choice",
-        )
-    with brain_col_3:
-        st.selectbox(
-            "Player 3",
-            choices,
-            index=2,
-            key="player_3_agent_choice",
-        )
-
-    if not MODEL_PATH.exists():
-        st.caption(
-            "💡 Hannah is still a beginner. Visit her Learning Lab "
-            "to give her the first practice rounds."
-        )
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("🤖 WATCH THE BOTS", width="stretch"):
-            initialize_game("automatic")
-            st.rerun()
-
-    with col2:
-        if st.button("🎮 PLAY YOURSELF", width="stretch"):
-            initialize_game("human")
-            st.rerun()
-
-else:
-    winner = winner_if_game_over(st.session_state.players)
-
-    center_left, center, center_right = st.columns([1, 2, 1])
-
-    with center:
-        st.markdown(
-            f'<div class="main-status"><div class="round-count">ROUND {st.session_state.round_number}</div></div>',
-            unsafe_allow_html=True,
-        )
-
-        button_col1, button_col2 = st.columns(2)
-
-        with button_col1:
-            button_text = "▶ RESUME" if st.session_state.paused else "⏸ PAUSE"
-
-            if st.button(button_text, width="stretch"):
-                st.session_state.paused = not st.session_state.paused
-                st.rerun()
-
-        with button_col2:
-            if st.button("↻ RESTART", width="stretch"):
-                reset_everything()
-
-    if st.session_state.game_over and winner:
-        st.success(f"{winner.name} wins the game with {winner.total_score} points!")
-
-    current = current_player()
-
-    show_game_board()
-
-    if (
-        st.session_state.turn_phase == "choosing_freeze"
-        and st.session_state.pending_freeze_actor_index is not None
-    ):
-        choose_freeze_target()
-
-    if (
-        st.session_state.turn_phase == "choosing_flip_three"
-        and st.session_state.pending_flip_three_actor_index is not None
-    ):
-        choose_flip_three_target()
-
-    ai_explanation = st.session_state.get("last_ai_explanation")
-    if ai_explanation:
-        with st.expander(f"🧠 Why did {ai_explanation['player']} choose that?"):
-            st.write(
-                f"Hannah compared her learned values: "
-                f"**HIT {ai_explanation['hit_value']:.1f}** and "
-                f"**STAY {ai_explanation['stay_value']:.1f}**. "
-                f"It chose **{ai_explanation['action'].upper()}** because that choice "
-                f"worked better during self-play in similar situations."
-            )
-
-    should_auto_think = (
-        not st.session_state.paused
-        and not st.session_state.game_over
-        and st.session_state.turn_phase == "thinking"
-        and not (st.session_state.mode == "human" and current.is_human)
-    )
-
-    should_auto_advance_result = (
-        not st.session_state.paused
-        and not st.session_state.game_over
-        and st.session_state.turn_phase == "result"
-    )
-
-    if should_auto_think:
-        time.sleep(THINK_DELAY_SECONDS)
-        execute_current_turn()
-        st.rerun()
-
-    if should_auto_advance_result:
-        time.sleep(RESULT_DELAY_SECONDS)
-        advance_after_result()
-        st.rerun()

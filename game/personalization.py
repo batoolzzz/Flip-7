@@ -1,4 +1,4 @@
-"""Child-friendly character profiles and Hannah's learning milestones."""
+"""Character profiles and Hannah's learning milestones."""
 
 from pathlib import Path
 
