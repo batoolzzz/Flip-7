@@ -65,8 +65,80 @@ for _key, _value in _DEFAULTS.items():
 
 flush_pending_toast()
 
+@st.dialog("Choose who gets Flip Three", dismissible=False, icon=":material/style:")
+
+def _choose_flip_three_target():
+    actor_index = st.session_state.get("pending_flip_three_actor_index")
+    if actor_index is None:
+        st.rerun()
+
+    actor = st.session_state.players[actor_index]
+    st.write(
+        "You drew **Flip Three**. Take the three cards yourself, or pass them to "
+        "another active player."
+    )
+    for target_index, target in enumerate(st.session_state.players):
+        label = (
+            f"TAKE 3 CARDS MYSELF ({target.name.upper()})"
+            if target_index == actor_index
+            else f"PASS TO {target.name.upper()}"
+        )
+        if st.button(label, key=f"flip_three_target_{target_index}",
+                     disabled=not target.active, use_container_width=True):
+            play_flip_three(actor, target, st.session_state.deck)
+            queue_special_card_notification(actor, target, "Flip Three")
+            st.session_state.pending_flip_three_actor_index = None
+            st.session_state.last_decisions[actor.name] = "hit"
+            st.session_state.pending_round_finish = round_is_over(st.session_state.players)
+            st.session_state.turn_phase = "result"
+            st.rerun()
+
+
+@st.dialog("Choose who gets Freeze", dismissible=False, icon=":material/ac_unit:")
+
+def _choose_freeze_target():
+    actor_index = st.session_state.get("pending_freeze_actor_index")
+    if actor_index is None:
+        st.rerun()
+
+    actor = st.session_state.players[actor_index]
+    st.write(
+        "You drew **Freeze**. Freeze yourself to bank points, or freeze an opponent."
+    )
+    for target_index, target in enumerate(st.session_state.players):
+        label = (
+            f"FREEZE MYSELF ({target.name.upper()})"
+            if target_index == actor_index
+            else f"FREEZE {target.name.upper()}"
+        )
+        if st.button(label, key=f"freeze_target_{target_index}",
+                     disabled=not target.active, use_container_width=True):
+            play_freeze(actor, target)
+            queue_special_card_notification(actor, target, "Freeze")
+            st.session_state.pending_freeze_actor_index = None
+            st.session_state.last_decisions[actor.name] = "hit"
+            st.session_state.pending_round_finish = round_is_over(st.session_state.players)
+            st.session_state.turn_phase = "result"
+            st.rerun()
+
 # Sidebar navigation to change mode
-area = st.sidebar.radio("Choose an area", ["🎲 Play Game", "🧠 Hannah's Learning Lab"])
+# area = st.sidebar.radio("Choose an area", ["🎲 Play Game", "🧠 Hannah's Learning Lab"])
+
+with st.sidebar:
+    st.markdown(
+        """
+        <div style="font-size: 13px; font-weight: 900; color: #78350F; 
+                    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">
+            Choose an Area
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    area = st.radio(
+        "Choose an area",
+        ["🎲 Play Game", "🧠 Hannah's Learning Lab"],
+        label_visibility="collapsed",
+    )
 
 if area == "🧠 Hannah's Learning Lab":
     agent, metadata = QLearningAgent.load(MODEL_PATH)
@@ -85,7 +157,6 @@ if area == "🧠 Hannah's Learning Lab":
     )
     st.stop()
 
-# Play area: Setup screen
 if not st.session_state.game_started:
     render_setup_screen(
         agent_options=AGENT_OPTIONS,
@@ -151,58 +222,3 @@ if should_auto_advance_result:
     time.sleep(RESULT_DELAY_SECONDS)
     advance_after_result()
     st.rerun()
-
-
-@st.dialog("Choose who gets Flip Three", dismissible=False, icon=":material/style:")
-def _choose_flip_three_target():
-    actor_index = st.session_state.get("pending_flip_three_actor_index")
-    if actor_index is None:
-        st.rerun()
-
-    actor = st.session_state.players[actor_index]
-    st.write(
-        "You drew **Flip Three**. Take the three cards yourself, or pass them to "
-        "another active player."
-    )
-    for target_index, target in enumerate(st.session_state.players):
-        label = (
-            f"TAKE 3 CARDS MYSELF ({target.name.upper()})"
-            if target_index == actor_index
-            else f"PASS TO {target.name.upper()}"
-        )
-        if st.button(label, key=f"flip_three_target_{target_index}",
-                     disabled=not target.active, use_container_width=True):
-            play_flip_three(actor, target, st.session_state.deck)
-            queue_special_card_notification(actor, target, "Flip Three")
-            st.session_state.pending_flip_three_actor_index = None
-            st.session_state.last_decisions[actor.name] = "hit"
-            st.session_state.pending_round_finish = round_is_over(st.session_state.players)
-            st.session_state.turn_phase = "result"
-            st.rerun()
-
-
-@st.dialog("Choose who gets Freeze", dismissible=False, icon=":material/ac_unit:")
-def _choose_freeze_target():
-    actor_index = st.session_state.get("pending_freeze_actor_index")
-    if actor_index is None:
-        st.rerun()
-
-    actor = st.session_state.players[actor_index]
-    st.write(
-        "You drew **Freeze**. Freeze yourself to bank points, or freeze an opponent."
-    )
-    for target_index, target in enumerate(st.session_state.players):
-        label = (
-            f"FREEZE MYSELF ({target.name.upper()})"
-            if target_index == actor_index
-            else f"FREEZE {target.name.upper()}"
-        )
-        if st.button(label, key=f"freeze_target_{target_index}",
-                     disabled=not target.active, use_container_width=True):
-            play_freeze(actor, target)
-            queue_special_card_notification(actor, target, "Freeze")
-            st.session_state.pending_freeze_actor_index = None
-            st.session_state.last_decisions[actor.name] = "hit"
-            st.session_state.pending_round_finish = round_is_over(st.session_state.players)
-            st.session_state.turn_phase = "result"
-            st.rerun()

@@ -7,6 +7,7 @@ import streamlit as st
 
 from ui.templates import (
     html_busted_box,
+    html_stayed_box,
     html_cards_hand,
     html_choose_game_banner,
     html_compact_header,
@@ -66,7 +67,6 @@ def _show_player_panel(player, execute_turn_fn, character_profile_fn) -> None:
         and st.session_state.turn_phase == "thinking"
     )
 
-    # Active glow class wrapper applied directly above the container
     active_class = "active-turn-wrapper" if is_current else "inactive-turn-wrapper"
     st.markdown(f'<div class="{active_class}">', unsafe_allow_html=True)
 
@@ -95,12 +95,12 @@ def _show_player_panel(player, execute_turn_fn, character_profile_fn) -> None:
         if is_human_turn:
             hit_col, stay_col = st.columns(2)
             with hit_col:
-                if st.button("HIT 🎴", key="player_1_hit", use_container_width=True):
+                if st.button("HIT", key="player_1_hit", use_container_width=True):
                     execute_turn_fn("hit")
                     st.rerun()
             with stay_col:
                 if st.button(
-                    "STAY 🛑",
+                    "STAY",
                     key="player_1_stay",
                     disabled=not player.has_any_card(),
                     use_container_width=True,
@@ -119,15 +119,13 @@ def _show_player_panel(player, execute_turn_fn, character_profile_fn) -> None:
 
         if player.busted:
             st.markdown(html_busted_box(is_busted=True), unsafe_allow_html=True)
+        if player.stayed and not player.busted:
+            st.markdown(html_stayed_box(is_stayed=True), unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)
 
 
 def show_game_board(execute_turn_fn, character_profile_fn) -> None:
-    """
-    Renders all 3 players side-by-side in one balanced row.
-    Eliminates vertical scrolling completely on desktop screens.
-    """
     players = st.session_state.players
     col1, col2, col3 = st.columns(3)
 
@@ -143,7 +141,7 @@ def render_ai_explanation() -> None:
     explanation = st.session_state.get("last_ai_explanation")
     if not explanation:
         return
-    with st.expander(f"🧠 Hannah's Brain: Why did {explanation['player']} choose that?"):
+    with st.expander(f"Get to know Hannah's Brain: Why did {explanation['player']} choose that?"):
         st.write(
             f"Hannah evaluated her learned values: "
             f"**HIT: {explanation['hit_value']:.1f}** vs "
@@ -167,11 +165,11 @@ def render_setup_screen(agent_options: dict, initialize_game_fn) -> None:
 
     btn_col1, btn_col2 = st.columns(2)
     with btn_col1:
-        if st.button("👀 WATCH THE BOTS", use_container_width=True):
+        if st.button("WATCH THE BOTS", use_container_width=True):
             initialize_game_fn("automatic")
             st.rerun()
     with btn_col2:
-        if st.button("🎮 PLAY YOURSELF", use_container_width=True):
+        if st.button("PLAY YOURSELF", use_container_width=True):
             initialize_game_fn("human")
             st.rerun()
 
@@ -276,7 +274,7 @@ def show_learning_lab(
         st.line_chart(performance_data)
 
     st.subheader("3. Test Hannah against the other characters")
-    if st.button("🏆 RUN A 300-ROUND BOT CHALLENGE", use_container_width=True):
+    if st.button("RUN A 300-ROUND BOT CHALLENGE", use_container_width=True):
         with st.spinner("Running fair tests without changing what the AI learned..."):
             st.session_state.benchmarks = {
                 "Riley": evaluate_fn(agent, random_agent_cls),

@@ -61,7 +61,6 @@ def html_player_stats_ribbon(total_score: int, round_score: int) -> str:
         f'</div>'
     )
 
-
 def html_card_chip(card_str: str) -> str:
     safe = _html.escape(card_str)
     
@@ -70,7 +69,7 @@ def html_card_chip(card_str: str) -> str:
     if "Flip Three" in card_str:
         return f'<div class="flip7-card card-action-flipthree">⚡<br>Flip 3</div>'
     if "Second Chance" in card_str:
-        return f'<div class="flip7-card card-action-secondchance">🛡️<br>Shield</div>'
+        return f'<div class="flip7-card card-action-secondchance">🛡️<br>Second Chance</div>'
     if card_str.startswith("+") or card_str == "x2":
         return f'<div class="flip7-card card-modifier">{safe}</div>'
     
@@ -104,4 +103,9 @@ def html_decision_boxes(hit_selected: bool = False, stay_selected: bool = False)
 def html_busted_box(is_busted: bool) -> str:
     if not is_busted:
         return ""
-    return '<div class="busted-box">💥 BUSTED!</div>'
+    return '<div class="busted-box">BUSTED!</div>'
+
+def html_stayed_box(is_stayed: bool) -> str:
+    if not is_stayed:
+        return ""
+    return '<div class="stayed-box">STAYED!</div>'
