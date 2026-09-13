@@ -1,4 +1,4 @@
-"""Child-friendly character profiles and Hannah's learning milestones."""
+"""Character profiles and Hannah's learning milestones."""
 
 from pathlib import Path
 
@@ -37,17 +37,12 @@ HANNAH_MILESTONES = (
     (10_000, "Strategy star"),
 )
 
-
+# Get Character Profile for player
 def character_profile(agent_type: str | None = None, is_human: bool = False) -> dict:
-    """Return the picture and child-facing identity for a player."""
-
     profile_key = "human" if is_human else agent_type
     return CHARACTER_PROFILES.get(profile_key, CHARACTER_PROFILES["random"])
 
-
 def hannah_learning_level(trained_rounds: int) -> dict:
-    """Turn Hannah's real practice count into a friendly level and progress."""
-
     rounds = max(0, int(trained_rounds))
     level_index = 0
     for index, (threshold, _) in enumerate(HANNAH_MILESTONES):
