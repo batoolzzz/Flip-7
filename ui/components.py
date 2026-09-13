@@ -2,77 +2,52 @@
 This is Streamlit rendering functions used to render state and build HTML string for templates.
 
 """
-
 from pathlib import Path
-import html as _html
-
 import streamlit as st
 
 from ui.templates import (
     html_busted_box,
+    html_cards_hand,
     html_choose_game_banner,
+    html_compact_header,
     html_decision_boxes,
     html_learning_lab_banner,
-    html_logo,
-    html_player_stats,
+    html_player_stats_ribbon,
     html_player_title,
-    html_round_banner,
-    html_subtitle,
-    html_turn_label,
+    html_turn_pill,
 )
 
 _STYLES_PATH = Path(__file__).parent / "styles.css"
 
 
-# Stylesheet injection 
-
 def inject_styles() -> None:
-    """ this needs to be loaded at app start time to inject CSS."""
     css = _STYLES_PATH.read_text(encoding="utf-8")
     st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
 
 
-# Page chrome
+def render_compact_cockpit(round_number: int, reset_fn) -> None:
+    """Single-row header bar containing Logo, Round number, and controls."""
+    bar_col, pause_col, reset_col = st.columns([6, 1.2, 1.2], vertical_alignment="center")
+    
+    with bar_col:
+        st.markdown(html_compact_header(round_number), unsafe_allow_html=True)
+        
+    with pause_col:
+        st.markdown('<div class="cockpit-btn">', unsafe_allow_html=True)
+        button_text = "▶ Resume" if st.session_state.paused else "⏸ Pause"
+        if st.button(button_text, key="cockpit_pause_btn", use_container_width=True):
+            st.session_state.paused = not st.session_state.paused
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
-def render_logo(subtitle: str = "Race to 200 points! Draw or Stay and Dodge duplicates") -> None:
-    st.markdown(html_logo(), unsafe_allow_html=True)
-    st.markdown(html_subtitle(subtitle), unsafe_allow_html=True)
-
-
-def render_round_banner(round_number: int) -> None:
-    st.markdown(html_round_banner(round_number), unsafe_allow_html=True)
-
-
-def render_choose_game_banner() -> None:
-    st.markdown(html_choose_game_banner(), unsafe_allow_html=True)
-    st.markdown(
-        html_subtitle("Try yourself first or see the bots battle and learn cool tricks."),
-        unsafe_allow_html=True,
-    )
-
-
-def render_learning_lab_banner() -> None:
-    st.markdown(html_learning_lab_banner(), unsafe_allow_html=True)
-
-
-# Game board 
-
-def _get_cards_text(player) -> str:
-    cards = player.visible_cards()
-    return ", ".join(cards) if cards else "None"
+    with reset_col:
+        st.markdown('<div class="cockpit-btn">', unsafe_allow_html=True)
+        if st.button("🔄 Restart", key="cockpit_restart_btn", use_container_width=True):
+            reset_fn()
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
 def _show_player_panel(player, execute_turn_fn, character_profile_fn) -> None:
-    """
-    Renders one player's panel inside whatever Streamlit column the caller
-    has already entered.  Needs two injected callables to stay decoupled
-    from app-level state and game logic.
-
-    Args:
-        player:               Player dataclass instance.
-        execute_turn_fn:      Callable(decision: str | None) — triggers a turn.
-        character_profile_fn: Callable(agent_type, is_human) → profile dict.
-    """
     current_index = st.session_state.current_player_index
     players = st.session_state.players
     player_index = players.index(player)
@@ -91,38 +66,44 @@ def _show_player_panel(player, execute_turn_fn, character_profile_fn) -> None:
         and st.session_state.turn_phase == "thinking"
     )
 
-    st.markdown(html_turn_label(is_current), unsafe_allow_html=True)
+    # Active glow class wrapper applied directly above the container
+    active_class = "active-turn-wrapper" if is_current else "inactive-turn-wrapper"
+    st.markdown(f'<div class="{active_class}">', unsafe_allow_html=True)
 
-    agent_type = st.session_state.agent_types[player_index]
-    profile = character_profile_fn(agent_type, is_human=player.is_human)
-    st.markdown(html_player_title(player.name, is_current), unsafe_allow_html=True)
+    with st.container(border=True, key=f"player_card_container_{player_index}"):
+        st.markdown(html_turn_pill(is_current), unsafe_allow_html=True)
 
-    with st.container(border=True, key=f"player_card_{player_index}"):
-        with st.container(horizontal_alignment="center", gap=None):
-            st.image(str(profile["avatar"]), width=132)
-            st.caption(profile["subtitle"], text_alignment="center")
+        agent_type = st.session_state.agent_types[player_index]
+        profile = character_profile_fn(agent_type, is_human=player.is_human)
+
+        st.markdown(html_player_title(player.name, is_current), unsafe_allow_html=True)
+
+        with st.container(horizontal_alignment="center"):
+            st.image(str(profile["avatar"]), width=80)
+            st.caption(profile["subtitle"])
 
         st.markdown(
-            html_player_stats(
-                player.total_score,
-                player.current_score(),
-                _get_cards_text(player),
-            ),
+            html_player_stats_ribbon(player.total_score, player.current_score()),
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            html_cards_hand(player.visible_cards()),
             unsafe_allow_html=True,
         )
 
         if is_human_turn:
             hit_col, stay_col = st.columns(2)
             with hit_col:
-                if st.button("HIT", key="player_1_hit", width="stretch"):
+                if st.button("HIT 🎴", key="player_1_hit", use_container_width=True):
                     execute_turn_fn("hit")
                     st.rerun()
             with stay_col:
                 if st.button(
-                    "STAY",
+                    "STAY 🛑",
                     key="player_1_stay",
                     disabled=not player.has_any_card(),
-                    width="stretch",
+                    use_container_width=True,
                 ):
                     execute_turn_fn("stay")
                     st.rerun()
@@ -139,55 +120,44 @@ def _show_player_panel(player, execute_turn_fn, character_profile_fn) -> None:
         if player.busted:
             st.markdown(html_busted_box(is_busted=True), unsafe_allow_html=True)
 
+    st.markdown('</div>', unsafe_allow_html=True)
+
 
 def show_game_board(execute_turn_fn, character_profile_fn) -> None:
     """
-    Renders the 3-player game board layout:
-      · Player 0 centred at the top
-      · Players 1 and 2 side-by-side at the bottom
+    Renders all 3 players side-by-side in one balanced row.
+    Eliminates vertical scrolling completely on desktop screens.
     """
     players = st.session_state.players
+    col1, col2, col3 = st.columns(3)
 
-    top_left, top_center, top_right = st.columns([1, 2, 1])
-    with top_center:
+    with col1:
         _show_player_panel(players[0], execute_turn_fn, character_profile_fn)
-
-    bottom_left, bottom_right = st.columns(2)
-    with bottom_left:
-        _show_player_panel(players[2], execute_turn_fn, character_profile_fn)
-    with bottom_right:
+    with col2:
         _show_player_panel(players[1], execute_turn_fn, character_profile_fn)
+    with col3:
+        _show_player_panel(players[2], execute_turn_fn, character_profile_fn)
 
-
-# AI explanation expander
 
 def render_ai_explanation() -> None:
     explanation = st.session_state.get("last_ai_explanation")
     if not explanation:
         return
-    with st.expander(f"Think: Why did {explanation['player']} choose that?"):
+    with st.expander(f"🧠 Hannah's Brain: Why did {explanation['player']} choose that?"):
         st.write(
-            f"Hannah compared her learned values: "
-            f"**HIT {explanation['hit_value']:.1f}** and "
-            f"**STAY {explanation['stay_value']:.1f}**. "
-            f"It chose **{explanation['action'].upper()}** because that choice "
-            f"worked better during self-play in similar situations."
+            f"Hannah evaluated her learned values: "
+            f"**HIT: {explanation['hit_value']:.1f}** vs "
+            f"**STAY: {explanation['stay_value']:.1f}**. "
+            f"She decided to **{explanation['action'].upper()}** because that choice "
+            f"gave her a higher reward during training."
         )
 
 
-#  Game setup screen ─
-
 def render_setup_screen(agent_options: dict, initialize_game_fn) -> None:
-    """
-    This renders the pre-game setup UI.  Returns without doing anything when
-    the user has not pressed a start button yet.
-    """
-    render_choose_game_banner()
-
-    st.markdown("### Choose each bot's brain")
+    st.markdown(html_choose_game_banner(), unsafe_allow_html=True)
+    st.markdown("### Choose Bot Personalities")
     brain_col_1, brain_col_2, brain_col_3 = st.columns(3)
     choices = list(agent_options)
-
     with brain_col_1:
         st.selectbox("Player 1 (watch mode)", choices, index=1, key="player_1_agent_choice")
     with brain_col_2:
@@ -195,32 +165,16 @@ def render_setup_screen(agent_options: dict, initialize_game_fn) -> None:
     with brain_col_3:
         st.selectbox("Player 3", choices, index=2, key="player_3_agent_choice")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🤖 WATCH THE BOTS", width="stretch"):
+    btn_col1, btn_col2 = st.columns(2)
+    with btn_col1:
+        if st.button("👀 WATCH THE BOTS", use_container_width=True):
             initialize_game_fn("automatic")
             st.rerun()
-    with col2:
-        if st.button("🎮 PLAY YOURSELF", width="stretch"):
+    with btn_col2:
+        if st.button("🎮 PLAY YOURSELF", use_container_width=True):
             initialize_game_fn("human")
             st.rerun()
 
-
-#  In-game controls (pause / restart)
-
-def render_game_controls(reset_fn) -> None:
-    button_col1, button_col2 = st.columns(2)
-    with button_col1:
-        button_text = "▶ RESUME" if st.session_state.paused else "⏸ PAUSE"
-        if st.button(button_text, width="stretch"):
-            st.session_state.paused = not st.session_state.paused
-            st.rerun()
-    with button_col2:
-        if st.button("↻ RESTART", width="stretch"):
-            reset_fn()
-
-
-#  Learning lab 
 
 def show_learning_lab(
     agent,
@@ -235,44 +189,34 @@ def show_learning_lab(
     character_profile_fn,
     hannah_learning_level_fn,
 ) -> None:
-    """
-    Renders the full Learning Lab tab.
-
-    All dependencies are injected so this module has zero top-level imports
-    from the agents / training packages — those stay in app.py.
-    """
     trained_rounds = int(metadata.get("trained_rounds", 0))
     history = list(metadata.get("history", []))
+    st.markdown(html_learning_lab_banner(), unsafe_allow_html=True)
 
-    render_learning_lab_banner()
     st.info(
         "Hannah learns by playing practice games against copies of herself. "
         "Riley and Felix are only used afterward to test what she learned."
     )
-
     if st.session_state.pop("training_was_reset", False):
         st.success("Hannah's training was reset. She is starting fresh.")
-
     learning = hannah_learning_level_fn(trained_rounds)
     intro_portrait, intro_progress = st.columns([1, 3], vertical_alignment="center")
     with intro_portrait:
-        st.image(str(character_profile_fn("q_learning")["avatar"]), width=160)
+        st.image(str(character_profile_fn("q_learning")["avatar"]), width=130)
     with intro_progress:
         st.subheader(f"Level {learning['level']}: {learning['title']}")
         progress_text = (
             "Top practice level reached — Hannah can still keep learning!"
             if learning["next_rounds"] is None
-            else f"{learning['rounds_to_next']:,} more rounds to reach the next level"
+            else f"{learning['rounds_to_next']:,} more rounds to reach next level"
         )
         st.progress(learning["progress"], text=progress_text)
-        st.caption("Levels count real self-play practice rounds saved in Hannah's learning file.")
 
     metric_1, metric_2, metric_3 = st.columns(3)
     metric_1.metric("Practice rounds", f"{trained_rounds:,}")
     metric_2.metric("Situations learned", f"{len(agent.q_table):,}")
     metric_3.metric("Exploration now", "0% in real games")
 
-    #  Training buttons 
     st.subheader("1. Help Hannah practise")
     st.write(
         "At first Hannah explores lots of HIT and STAY choices. As she practises, "
@@ -281,10 +225,10 @@ def show_learning_lab(
     quick_col, deep_col = st.columns(2)
     train_rounds = None
     with quick_col:
-        if st.button("⚡ PRACTISE 500 ROUNDS", width="stretch"):
+        if st.button("🚀 PRACTISE 500 ROUNDS", use_container_width=True):
             train_rounds = 500
     with deep_col:
-        if st.button("🚀 PRACTISE 5,000 ROUNDS", width="stretch"):
+        if st.button("🧠 PRACTISE 5,000 ROUNDS", use_container_width=True):
             train_rounds = 5000
 
     if train_rounds:
@@ -301,15 +245,12 @@ def show_learning_lab(
         st.rerun()
 
     with st.expander("Reset AI training"):
-        st.warning(
-            "This permanently clears Hannah's learned choices, practice "
-            "round count, learning graph, and saved benchmark results."
-        )
+        st.warning("This permanently clears Hannah's learned choices and practice history.")
         reset_confirmed = st.checkbox(
             "I understand and want Hannah to start from scratch.",
             key="confirm_training_reset",
         )
-        if st.button("🗑️ RESET AI TRAINING", disabled=not reset_confirmed, width="stretch"):
+        if st.button("RESET AI TRAINING", disabled=not reset_confirmed, use_container_width=True):
             ql_agent_cls().save(
                 model_path,
                 {"trained_rounds": 0, "history": [], "model_version": 2},
@@ -318,7 +259,6 @@ def show_learning_lab(
             st.session_state.training_was_reset = True
             st.rerun()
 
-    #  Training charts ─
     if history:
         st.subheader("2. Watch Hannah get smarter")
         st.area_chart(
@@ -327,32 +267,21 @@ def show_learning_lab(
             y="states_learned",
             x_label="Practice round",
             y_label="Situations learned",
-            color="#6C5CE7",
-        )
-        st.caption(
-            "Each new situation is another card pattern Hannah has practised. "
-            "Her growing memory is saved and used in future games."
+            color="#028090",
         )
         performance_data = {
             "Hannah's average points": [p["average_score"] for p in history],
-            "Hannah's bust rate × 100": [p["bust_rate"] * 100 for p in history],
+            "Hannah's bust rate * 100": [p["bust_rate"] * 100 for p in history],
         }
         st.line_chart(performance_data)
-        st.caption(
-            "The line changes because the opponents are learning too. A higher "
-            "bust rate is not automatically worse: calculated risks can also "
-            "raise Hannah's average points and win rate."
-        )
 
-    #  Benchmark ─
     st.subheader("3. Test Hannah against the other characters")
-    if st.button("🏁 RUN A 300-ROUND BOT CHALLENGE", width="stretch"):
+    if st.button("🏆 RUN A 300-ROUND BOT CHALLENGE", use_container_width=True):
         with st.spinner("Running fair tests without changing what the AI learned..."):
             st.session_state.benchmarks = {
                 "Riley": evaluate_fn(agent, random_agent_cls),
                 "Felix": evaluate_fn(agent, rule_agent_cls),
             }
-
     benchmarks = st.session_state.get("benchmarks")
     if benchmarks:
         columns = st.columns(2)
@@ -362,10 +291,8 @@ def show_learning_lab(
                 st.write(f"Average points: **{result['average_score']:.1f}**")
                 st.write(f"Bust rate: **{result['bust_rate']:.0%}**")
 
-    #  State explorer 
     st.subheader("4. Ask what the AI would do")
-    from agents.base_agent import Observation  # local import to avoid circular deps
-
+    from agents.base_agent import Observation
     explorer_1, explorer_2 = st.columns(2)
     with explorer_1:
         example_score = st.slider("Points this round", 0, 70, 25, 5)
@@ -373,8 +300,6 @@ def show_learning_lab(
     with explorer_2:
         example_second_chance = st.checkbox("Has a Second Chance")
         example_risk = st.slider("Estimated duplicate risk", 0, 50, 15, 5) / 100
-        st.write("The AI estimates risk from face-up cards—never the hidden deck order.")
-
     example = Observation(
         round_score=example_score,
         unique_cards=example_unique,
@@ -390,8 +315,3 @@ def show_learning_lab(
         f"Learned value — HIT: {explanation['hit_value']:.1f}, "
         f"STAY: {explanation['stay_value']:.1f}."
     )
-    if explanation["hit_value"] == explanation["stay_value"] == 0:
-        st.warning(
-            "This exact kind of situation has not been learned yet. "
-            "Give Hannah more practice and try again!"
-        )

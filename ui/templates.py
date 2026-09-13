@@ -1,163 +1,107 @@
 """
-html string builders that return HTML strings for use in Streamlit components.  Used by ui/components.py.
+html string builders that return HTML strings for use in Streamlit components.
 """
 
 import html as _html
 
-#  Logo & chrome 
-
-def html_logo() -> str:
+def html_compact_header(round_number: int, winning_score: int = 200) -> str:
     return (
-        '<div class="game-logo">'
-        'FLIP <span class="game-logo-seven">7</span>'
-        '</div>'
-    )
-
-
-def html_subtitle(text: str) -> str:
-    safe = _html.escape(text)
-    return f'<div class="game-subtitle">{safe}</div>'
-
-
-def html_main_status(inner: str) -> str:
-    """Wraps arbitrary content in the branded status banner."""
-    return f'<div class="main-status">{inner}</div>'
-
-
-def html_round_count(label: str) -> str:
-    safe = _html.escape(label)
-    return f'<div class="round-count">{safe}</div>'
-
-
-def html_round_banner(round_number: int) -> str:
-    return html_main_status(html_round_count(f"ROUND {round_number}"))
-
-
-def html_choose_game_banner() -> str:
-    return html_main_status(html_round_count("CHOOSE YOUR GAME"))
-
-
-def html_learning_lab_banner() -> str:
-    return html_main_status(html_round_count("HANNAH'S LEARNING LAB"))
-
-
-#  Turn label ─
-
-def html_turn_label(is_current: bool) -> str:
-    if is_current:
-        return (
-            '<div class="turn-label-wrapper">'
-            '<span class="current-turn-label">CURRENT TURN</span>'
-            '</div>'
-        )
-    return (
-        '<div class="turn-label-wrapper">'
-        '<span class="turn-label-hidden">CURRENT TURN</span>'
-        '</div>'
-    )
-
-
-#  Player title ─
-
-def html_player_title(name: str, is_current: bool) -> str:
-    css = "player-title current-player-title" if is_current else "player-title"
-    safe = _html.escape(name.upper())
-    return f'<div class="{css}">{safe}</div>'
-
-
-#  Player stats block ─
-
-def html_player_stats(total_score: int, round_score: int, cards_text: str) -> str:
-    safe_cards = _html.escape(cards_text)
-    return (
-        f'<div class="player-stats">'
-        f'⭐ Total score: <strong>{total_score}</strong><br>'
-        f'🎯 This round: <strong>{round_score}</strong><br>'
-        f'🃏 Cards: <strong>{safe_cards}</strong>'
+        f'<div class="top-cockpit-bar">'
+        f'  <div class="cockpit-logo-group">'
+        f'    <div class="cockpit-logo-text">FLIP <span class="cockpit-logo-seven">7</span></div>'
+        f'    <span class="cockpit-round-pill">ROUND {round_number}</span>'
+        f'  </div>'
+        f'  <div class="cockpit-target-text">First to <strong>{winning_score} pts</strong> wins!</div>'
         f'</div>'
     )
 
 
-#  Decision boxes ─
+def html_choose_game_banner() -> str:
+    return (
+        f'<div class="top-cockpit-bar" style="justify-content:center; flex-direction:column; text-align:center; padding: 12px;">'
+        f'  <div class="cockpit-logo-text" style="font-size:38px;">FLIP <span class="cockpit-logo-seven">7</span></div>'
+        f'  <div style="font-size:14px; font-weight:800; color:#475569; margin-top:4px;">'
+        f'    Race to 200 points! Draw cards, dodge duplicates, or bank safe points.'
+        f'  </div>'
+        f'</div>'
+    )
 
-def html_decision_boxes(
-    hit_selected: bool = False,
-    stay_selected: bool = False,
-) -> str:
+
+def html_learning_lab_banner() -> str:
+    return (
+        f'<div class="top-cockpit-bar" style="justify-content:center; text-align:center;">'
+        f'  <div class="cockpit-logo-text">HANNAH\'S <span class="cockpit-logo-seven" style="color:#6366F1;">LEARNING LAB</span></div>'
+        f'</div>'
+    )
+
+
+def html_turn_pill(is_current: bool) -> str:
+    if is_current:
+        return '<div class="turn-pill-active">★ YOUR TURN ★</div>'
+    return '<div class="turn-pill-inactive">INACTIVE</div>'
+
+
+def html_player_title(name: str, is_current: bool) -> str:
+    css = "player-title active-title" if is_current else "player-title"
+    safe = _html.escape(name.upper())
+    return f'<div class="{css}">{safe}</div>'
+
+
+def html_player_stats_ribbon(total_score: int, round_score: int) -> str:
+    return (
+        f'<div class="compact-score-ribbon">'
+        f'  <div class="score-chip">'
+        f'    <span class="score-chip-label">Banked</span>'
+        f'    <span class="score-chip-num">{total_score}</span>'
+        f'  </div>'
+        f'  <div class="score-chip">'
+        f'    <span class="score-chip-label">This Hand</span>'
+        f'    <span class="score-chip-num">{round_score}</span>'
+        f'  </div>'
+        f'</div>'
+    )
+
+
+def html_card_chip(card_str: str) -> str:
+    safe = _html.escape(card_str)
+    
+    if "Freeze" in card_str:
+        return f'<div class="flip7-card card-action-freeze">❄️<br>Freeze</div>'
+    if "Flip Three" in card_str:
+        return f'<div class="flip7-card card-action-flipthree">⚡<br>Flip 3</div>'
+    if "Second Chance" in card_str:
+        return f'<div class="flip7-card card-action-secondchance">🛡️<br>Shield</div>'
+    if card_str.startswith("+") or card_str == "x2":
+        return f'<div class="flip7-card card-modifier">{safe}</div>'
+    
+    return f'<div class="flip7-card card-number">{safe}</div>'
+
+
+def html_cards_hand(cards: list[str]) -> str:
+    if not cards:
+        cards_html = '<div class="empty-hand-placeholder">No cards drawn</div>'
+    else:
+        cards_html = "".join(html_card_chip(c) for c in cards)
+
+    return (
+        f'<div class="cards-hand-wrapper">'
+        f'  <div class="cards-deck-display">{cards_html}</div>'
+        f'</div>'
+    )
+
+
+def html_decision_boxes(hit_selected: bool = False, stay_selected: bool = False) -> str:
     hit_css = "decision-box hit-selected" if hit_selected else "decision-box"
     stay_css = "decision-box stay-selected" if stay_selected else "decision-box"
     return (
         f'<div class="decision-top-row">'
-        f'<div class="{hit_css}">HIT</div>'
-        f'<div class="{stay_css}">STAY</div>'
+        f'  <div class="{hit_css}">HIT</div>'
+        f'  <div class="{stay_css}">STAY</div>'
         f'</div>'
     )
 
 
 def html_busted_box(is_busted: bool) -> str:
-    css = "busted-box busted-selected" if is_busted else "busted-box"
-    label = "💥 BUSTED" if is_busted else "BUSTED"
-    return (
-        f'<div class="busted-row">'
-        f'<div class="{css}">{label}</div>'
-        f'</div>'
-    )
-
-
-#  Full player panel (legacy flat-HTML version, kept for compatibility) ─
-
-def html_player_panel(
-    player_name: str,
-    total_score: int,
-    round_score: int,
-    cards_text: str,
-    is_current: bool,
-    last_decision: str | None,
-    is_busted: bool,
-    show_decision_result: bool,
-) -> str:
-    """
-    Returns a self-contained player panel as HTML.
-    Used when Streamlit containers are not available (e.g. automated watch mode).
-    For interactive human-turn panels, use show_player_panel() in components.py
-    which renders proper Streamlit widgets.
-    """
-    title_css = "player-title current-player-title" if is_current else "player-title"
-    box_css = "status-box current-player-box" if is_current else "status-box"
-    turn_label_css = "current-turn-label" if is_current else "turn-label-hidden"
-
-    hit_css = (
-        "decision-box hit-selected"
-        if show_decision_result and last_decision == "hit"
-        else "decision-box"
-    )
-    stay_css = (
-        "decision-box stay-selected"
-        if show_decision_result and last_decision == "stay"
-        else "decision-box"
-    )
-    busted_css = "busted-box busted-selected" if is_busted else "busted-box"
-
-    safe_name = _html.escape(player_name.upper())
-    safe_cards = _html.escape(cards_text)
-
-    return (
-        f'<div class="player-panel">'
-        f'<div class="turn-label-wrapper">'
-        f'<span class="{turn_label_css}">CURRENT TURN</span>'
-        f'</div>'
-        f'<div class="{title_css}">{safe_name}</div>'
-        f'<div class="{box_css}">'
-        f'Total score: {total_score}<br>'
-        f'Current round score: {round_score}<br>'
-        f'Cards: {safe_cards}<br>'
-        f'<div class="decision-top-row">'
-        f'<div class="{hit_css}">HIT</div>'
-        f'<div class="{stay_css}">STAY</div>'
-        f'</div>'
-        f'<div class="busted-row">'
-        f'<div class="{busted_css}">BUSTED</div>'
-        f'</div>'
-        f'</div>'
-        f'</div>'
-    )
+    if not is_busted:
+        return ""
+    return '<div class="busted-box">💥 BUSTED!</div>'

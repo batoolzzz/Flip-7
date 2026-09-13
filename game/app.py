@@ -1,15 +1,6 @@
 """
-app.py
-------
-Streamlit entry point.  This file is ONLY an orchestrator:
-  · Initialises session defaults
-  · Decides which screen to show
-  · Delegates rendering to ui/components.py
-  · Delegates state mutations to game_logic/session.py
-
-No HTML strings, no CSS, no game logic lives here.
+Streamlit entry point for Flip 7 game and learning lab.
 """
-
 import time
 import sys
 from functools import partial
@@ -17,23 +8,19 @@ from pathlib import Path
 
 import streamlit as st
 
-# ── Path setup ────────────────────────────────────────────────────────────────
+# Path setup 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# ── Domain imports ────────────────────────────────────────────────────────────
 from agents import QLearningAgent, RandomAgent, RuleAgent
 from training import evaluate_agent, train_self_play
 from game.personalization import character_profile, hannah_learning_level
 from game import winner_if_game_over
 
-# ── Local layer imports ───────────────────────────────────────────────────────
 from ui.components import (
     inject_styles,
-    render_logo,
-    render_round_banner,
-    render_game_controls,
+    render_compact_cockpit,
     render_setup_screen,
     render_ai_explanation,
     show_game_board,
@@ -50,23 +37,20 @@ from game_logic.session import (
 )
 from game import play_freeze, play_flip_three, round_is_over
 
-# ── Constants ─────────────────────────────────────────────────────────────────
 MODEL_PATH = PROJECT_ROOT / "models" / "q_table.json"
 
 AGENT_OPTIONS = {
-    "🎲 Riley (random robot)": "random",
-    "📏 Felix (rule-following fox)": "rule",
+    "🤖 Riley (random robot)": "random",
+    "🦊 Felix (rule-following fox)": "rule",
     "🧠 Hannah (learning AI)": "q_learning",
 }
 
-THINK_DELAY_SECONDS = 2
-RESULT_DELAY_SECONDS = 2
+THINK_DELAY_SECONDS = 1.6
+RESULT_DELAY_SECONDS = 1.6
 
-# ── Page config & global CSS ──────────────────────────────────────────────────
-st.set_page_config(page_title="Flip 7 Demo", layout="wide")
+st.set_page_config(page_title="Flip 7 Demo", layout="wide", initial_sidebar_state="expanded")
 inject_styles()
 
-# ── Session state defaults ────────────────────────────────────────────────────
 _DEFAULTS = {
     "game_started": False,
     "last_decisions": {},
@@ -79,16 +63,12 @@ for _key, _value in _DEFAULTS.items():
     if _key not in st.session_state:
         st.session_state[_key] = _value
 
-# ── Flush any queued toast from the previous render cycle ─────────────────────
 flush_pending_toast()
 
-# ── Logo ──────────────────────────────────────────────────────────────────────
-render_logo()
+# Sidebar navigation to change mode
+area = st.sidebar.radio("Choose an area", ["🎲 Play Game", "🧠 Hannah's Learning Lab"])
 
-# ── Sidebar navigation ────────────────────────────────────────────────────────
-area = st.sidebar.radio("Choose an area", ["🎲 Play", "🧠 Learning Lab"])
-
-if area == "🧠 Learning Lab":
+if area == "🧠 Hannah's Learning Lab":
     agent, metadata = QLearningAgent.load(MODEL_PATH)
     show_learning_lab(
         agent=agent,
@@ -99,13 +79,13 @@ if area == "🧠 Learning Lab":
         random_agent_cls=RandomAgent,
         rule_agent_cls=RuleAgent,
         ql_agent_cls=QLearningAgent,
-        observe_fn=None,           # used internally by components.py
+        observe_fn=None,
         character_profile_fn=character_profile,
         hannah_learning_level_fn=hannah_learning_level,
     )
     st.stop()
 
-# ── Play area ─────────────────────────────────────────────────────────────────
+# Play area: Setup screen
 if not st.session_state.game_started:
     render_setup_screen(
         agent_options=AGENT_OPTIONS,
@@ -118,23 +98,21 @@ if not st.session_state.game_started:
     )
     st.stop()
 
-# ── Active game ───────────────────────────────────────────────────────────────
 winner = winner_if_game_over(st.session_state.players)
 
-center_left, center, center_right = st.columns([1, 2, 1])
-with center:
-    render_round_banner(st.session_state.round_number)
-    render_game_controls(reset_fn=reset_everything)
+render_compact_cockpit(
+    round_number=st.session_state.round_number,
+    reset_fn=reset_everything,
+)
 
 if st.session_state.game_over and winner:
-    st.success(f"{winner.name} wins the game with {winner.total_score} points!")
+    st.success(f"🎉 {winner.name} wins the game with {winner.total_score} points!")
 
 show_game_board(
     execute_turn_fn=execute_current_turn,
     character_profile_fn=character_profile,
 )
 
-# ── Special-card dialogs (human only) ─────────────────────────────────────────
 if (
     st.session_state.turn_phase == "choosing_freeze"
     and st.session_state.pending_freeze_actor_index is not None
@@ -149,7 +127,6 @@ if (
 
 render_ai_explanation()
 
-# ── Auto-advance loop ─────────────────────────────────────────────────────────
 _current = current_player()
 
 should_auto_think = (
@@ -176,7 +153,6 @@ if should_auto_advance_result:
     st.rerun()
 
 
-# ── Special-card dialog helpers (defined after imports are settled) ────────────
 @st.dialog("Choose who gets Flip Three", dismissible=False, icon=":material/style:")
 def _choose_flip_three_target():
     actor_index = st.session_state.get("pending_flip_three_actor_index")
@@ -185,17 +161,17 @@ def _choose_flip_three_target():
 
     actor = st.session_state.players[actor_index]
     st.write(
-        "You drew **Flip Three**. Take the three cards yourself, pass them to "
-        "Player 2, or pass them to Player 3. Only active players can receive it."
+        "You drew **Flip Three**. Take the three cards yourself, or pass them to "
+        "another active player."
     )
     for target_index, target in enumerate(st.session_state.players):
         label = (
-            f"TAKE THREE CARDS MYSELF — PLAYER {target_index + 1} ({target.name.upper()})"
+            f"TAKE 3 CARDS MYSELF ({target.name.upper()})"
             if target_index == actor_index
-            else f"PASS FLIP THREE TO PLAYER {target_index + 1} ({target.name.upper()})"
+            else f"PASS TO {target.name.upper()}"
         )
         if st.button(label, key=f"flip_three_target_{target_index}",
-                     disabled=not target.active, width="stretch"):
+                     disabled=not target.active, use_container_width=True):
             play_flip_three(actor, target, st.session_state.deck)
             queue_special_card_notification(actor, target, "Flip Three")
             st.session_state.pending_flip_three_actor_index = None
@@ -213,17 +189,16 @@ def _choose_freeze_target():
 
     actor = st.session_state.players[actor_index]
     st.write(
-        "You drew **Freeze**. Freeze yourself, pass it to Player 2, or pass it "
-        "to Player 3. Only active players can receive it."
+        "You drew **Freeze**. Freeze yourself to bank points, or freeze an opponent."
     )
     for target_index, target in enumerate(st.session_state.players):
         label = (
-            f"FREEZE MYSELF — PLAYER {target_index + 1} ({target.name.upper()})"
+            f"FREEZE MYSELF ({target.name.upper()})"
             if target_index == actor_index
-            else f"PASS FREEZE TO PLAYER {target_index + 1} ({target.name.upper()})"
+            else f"FREEZE {target.name.upper()}"
         )
         if st.button(label, key=f"freeze_target_{target_index}",
-                     disabled=not target.active, width="stretch"):
+                     disabled=not target.active, use_container_width=True):
             play_freeze(actor, target)
             queue_special_card_notification(actor, target, "Freeze")
             st.session_state.pending_freeze_actor_index = None
