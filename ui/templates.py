@@ -69,7 +69,7 @@ def html_card_chip(card_str: str) -> str:
     if "Flip Three" in card_str:
         return f'<div class="flip7-card card-action-flipthree">⚡<br>Flip 3</div>'
     if "Second Chance" in card_str:
-        return f'<div class="flip7-card card-action-secondchance">🛡️<br>Second Chance</div>'
+        return f'<div class="flip7-card card-action-secondchance">🛡️<br>Second<br>Chance</div>'
     if card_str.startswith("+") or card_str == "x2":
         return f'<div class="flip7-card card-modifier">{safe}</div>'
     

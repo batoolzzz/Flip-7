@@ -41,6 +41,9 @@ class QLearningAgent:
     def choose_action(self, observation: Observation, can_stay: bool = True) -> str:
         if not can_stay:
             return "hit"
+        if observation.has_second_chance:
+            if observation.total_score + observation.round_score < 200:
+                return "hit"
         if random.random() < self.epsilon:
             return random.choice(ACTIONS)
 
