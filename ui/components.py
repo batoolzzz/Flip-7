@@ -202,7 +202,7 @@ def show_learning_lab(
     with intro_portrait:
         st.image(str(character_profile_fn("q_learning")["avatar"]), width=130)
     with intro_progress:
-        st.subheader(f"Level {learning['level']}: {learning['title']}")
+        st.subheader(f"Level {learning['level']}: {learning['title']}", anchor=False)
         progress_text = (
             "Top practice level reached — Hannah can still keep learning!"
             if learning["next_rounds"] is None
@@ -215,7 +215,7 @@ def show_learning_lab(
     metric_2.metric("Situations learned", f"{len(agent.q_table):,}")
     metric_3.metric("Exploration now", "0% in real games")
 
-    st.subheader("1. Help Hannah practise")
+    st.subheader("1. Help Hannah practise", anchor=False)
     st.write(
         "At first Hannah explores lots of HIT and STAY choices. As she practises, "
         "she explores less and uses the choices that earned better rewards."
@@ -258,7 +258,7 @@ def show_learning_lab(
             st.rerun()
 
     if history:
-        st.subheader("2. Watch Hannah get smarter")
+        st.subheader("2. Watch Hannah get smarter", anchor=False)
         st.area_chart(
             history,
             x="round",
@@ -273,7 +273,7 @@ def show_learning_lab(
         }
         st.line_chart(performance_data)
 
-    st.subheader("3. Test Hannah against the other characters")
+    st.subheader("3. Test Hannah against the other characters", anchor=False)
     if st.button("RUN A 300-ROUND BOT CHALLENGE", use_container_width=True):
         with st.spinner("Running fair tests without changing what the AI learned..."):
             st.session_state.benchmarks = {
@@ -289,7 +289,7 @@ def show_learning_lab(
                 st.write(f"Average points: **{result['average_score']:.1f}**")
                 st.write(f"Bust rate: **{result['bust_rate']:.0%}**")
 
-    st.subheader("4. Ask what the AI would do")
+    st.subheader("4. Ask what the AI would do", anchor=False)
     from agents.base_agent import Observation
     explorer_1, explorer_2 = st.columns(2)
     with explorer_1:

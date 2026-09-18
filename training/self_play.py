@@ -51,15 +51,17 @@ def _play_round(agents, learning_agent: QLearningAgent | None = None):
             if scores.count(best_score) == 1 and scores[index] == best_score:
                 terminal_reward += WIN_BONUS
 
-            # Every decision contributed to the terminal outcome.  Updating
-            # each one directly toward that outcome is an undiscounted Monte
-            # Carlo return.  The previous bootstrapped update accidentally
+            # Every decision contributed to the terminal outcome. However choosing HIT while having a Second Chance is considered risk-free and it should not be penalized by the bust that happens later.  The previous bootstrapped update accidentally
             # gave STAY the whole reward and discounted the HITs that built it.
             for observation, action in history:
+                effective_reward = terminal_reward
+                if action == "hit" and observation.has_second_chance:
+                    effective_reward = max(effective_reward, observation.round_score)
+
                 learning_agent.update(
                     observation,
                     action,
-                    terminal_reward,
+                    effective_reward,
                     next_observation=None,
                 )
 

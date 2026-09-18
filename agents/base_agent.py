@@ -45,6 +45,7 @@ def observe(player, players) -> Observation:
         for number in set(player.number_cards)
     )
     unseen_cards = max(1, 94 - visible_card_count)
+    risk = 0.0 if player.has_second_chance else (dangerous_cards / unseen_cards)
 
     return Observation(
         round_score=player.current_score(),
@@ -52,5 +53,5 @@ def observe(player, players) -> Observation:
         has_second_chance=player.has_second_chance,
         total_score=player.total_score,
         leader_score=max(candidate.total_score for candidate in players),
-        bust_risk=dangerous_cards / unseen_cards,
+        bust_risk=risk,
     )
